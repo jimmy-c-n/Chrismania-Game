@@ -193,34 +193,38 @@ function drawTruck(tx, ty, anim){
   P(cx+0, hy-10, 1, 3,   '#c98a5e');
   P(cx-4, hy-9,  1, 2,   '#e0a878');
   P(cx-3, hy-11, 1, 1,   '#e8e2d0');
-  // forward arm gripping the light bar
-  P(cx+5,  hy-10, 3, 3, '#e0a878');
-  P(cx+8,  hy-9,  4, 2, '#d89a68');
-  P(cx+11, hy-8,  3, 3, '#e0a878');
+  // forward arm gripping the light bar - big guns
+  P(cx+5,  hy-11, 4, 4, '#e0a878');
+  P(cx+5,  hy-11, 4, 1, '#f0c896');    // bicep highlight
+  P(cx+8,  hy-10, 5, 3, '#d89a68');
+  P(cx+12, hy-9,  3, 4, '#e0a878');
   // back arm: the buff special arm, or a fist pump
   if(spWindup()){
     // wound back, charging with fire
-    P(cx-6, hy-12, 6, 4, '#e0a878');
-    P(cx-11, hy-14, 6, 6, '#d89a68');   // oversized fist cocked
-    if((t&1)===0) spawn(cx-8+Math.random()*4, hy-16, (Math.random()-.5), -Math.random(), 8, Math.random()<.5?'#f78a1e':'#ffd23e', 1);
+    P(cx-7, hy-13, 7, 5, '#e0a878');
+    P(cx-13, hy-16, 8, 8, '#d89a68');   // huge cocked fist
+    P(cx-13, hy-16, 8, 2, '#f0c896');
+    if((t&1)===0) spawn(cx-10+Math.random()*5, hy-18, (Math.random()-.5), -Math.random(), 8, Math.random()<.5?'#f78a1e':'#ffd23e', 1);
   } else if(spActive()){
     // massive buff arm punched forward
-    P(cx+2, hy-14, 13, 5, '#e0a878');
-    P(cx+6, hy-15, 9, 2,  '#d89a68');   // bicep bulge
-    P(cx+15, hy-16, 8, 8, '#d89a68');   // huge fist
-    P(cx+15, hy-16, 8, 2, '#f0c896');
-    P(cx+24, hy-14, 5, 1, '#fff8d8');   // motion lines
-    P(cx+24, hy-10, 5, 1, '#fff8d8');
+    P(cx+2, hy-15, 14, 7, '#e0a878');
+    P(cx+5, hy-16, 10, 3, '#d89a68');   // bicep bulge
+    P(cx+2, hy-15, 14, 1, '#f0c896');
+    P(cx+16, hy-18, 10, 10, '#d89a68'); // colossal fist
+    P(cx+16, hy-18, 10, 2, '#f0c896');
+    P(cx+27, hy-16, 6, 1, '#fff8d8');   // motion lines
+    P(cx+27, hy-11, 6, 1, '#fff8d8');
   } else if(special>0){
     // recovery: arm coming back
-    P(cx+1, hy-12, 8, 4, '#e0a878');
-    P(cx+8, hy-12, 4, 4, '#d89a68');
+    P(cx+1, hy-13, 9, 5, '#e0a878');
+    P(cx+9, hy-13, 5, 5, '#d89a68');
   } else if(((t>>3)&1)===0){
-    P(cx-8, hy-13, 3, 4, '#e0a878');
-    P(cx-8, hy-16, 3, 3, '#d89a68');
+    P(cx-9, hy-13, 4, 5, '#e0a878');
+    P(cx-9, hy-13, 1, 5, '#c98a5e');
+    P(cx-9, hy-17, 4, 4, '#d89a68');
   } else {
-    P(cx-8, hy-11, 3, 4, '#e0a878');
-    P(cx-9, hy-12, 3, 2, '#d89a68');
+    P(cx-9, hy-11, 4, 5, '#e0a878');
+    P(cx-10, hy-12, 4, 3, '#d89a68');
   }
   // head
   P(cx-3, hy-19, 8, 7, '#e8b482');
@@ -302,14 +306,14 @@ function drawMedal(m){
 
 /* ---------- Steve the captain (60ish, glasses, red helmet, not happy) ---------- */
 function drawCaptain(c){
-  const y = GY;                          // same ground line as the truck
+  const y = GY+6;                        // a touch forward of the truck's line
   const x = c.x|0;
-  // the flaming cowpat
+  // the flaming cowpat - big enough to see coming
   if(c.pat){
     const px=c.pat.x|0, f=(t>>2)%3;
-    P(px-1,y-2,8,2,'#5a4226'); P(px,y-3,6,1,'#6b4f2c'); P(px+1,y-4,3,1,'#4a3620');
-    P(px,y-7,5,3,'#f78a1e'); P(px+1+(f===1?1:0),y-9,3,2,'#ffd23e');
-    if((t&3)===0) spawn(px+2,y-8,(Math.random()-.5)*.4,-.6-Math.random()*.5,12,'#8f959d',1);
+    P(px-2,y-3,12,3,'#5a4226'); P(px-1,y-5,10,2,'#6b4f2c'); P(px+1,y-6,6,1,'#4a3620');
+    P(px,y-10,8,4,'#f78a1e'); P(px+2+(f===1?1:0),y-13,4,3,'#ffd23e'); P(px+3,y-15,2,2,'#fff8d8');
+    if((t&3)===0) spawn(px+4,y-12,(Math.random()-.5)*.4,-.6-Math.random()*.5,12,'#8f959d',1);
   }
   g.globalAlpha=.2; P(x-6,y-1,13,2,'#3a2712'); g.globalAlpha=1;
   if(c.phase==='trip'){
