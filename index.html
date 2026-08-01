@@ -1012,16 +1012,23 @@ function draw(){
     for(let i=0;i<CFG.LIVES;i++) drawHelmet(6+i*11, 29, i<lives);
   }
   if(state==='title'){
-    g.globalAlpha=.55; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
-    txt('CHRISMANIA', W/2, 46, 26, '#ffd23e', 'center');
-    txt('N S W  R F S  S T U M P  R U N', W/2, 62, 8, '#f2ead8', 'center');
-    txt('EUNGAI BRIGADE', W/2, 74, 8, '#f08c8c', 'center');
-    txt('JUMP THE STUMPS, GRAB RFS MEDALS,', W/2, 102, 8, '#fff', 'center');
-    txt('CHARGE THE POWER, SMASH THROUGH DANGER.', W/2, 112, 8, '#fff', 'center');
-    txt('SPACE / TAP - JUMP    CTRL / X - SPECIAL', W/2, 130, 7, '#f6d868', 'center');
-    txt('ESC - PAUSE   M - MUTE   F - FULLSCREEN', W/2, 140, 7, '#c9b98a', 'center');
-    if(hs>0) txt('BEST ' + hs, W/2, 152, 8, '#ffe9a8', 'center');
-    if((t>>4)%2===0) txt('PRESS SPACE / TAP TO START', W/2, 168, 9, '#ffd23e', 'center');
+    g.globalAlpha=.66; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
+    txt('CHRISMANIA', W/2, 40, 26, '#ffd23e', 'center');
+    txt('N S W  R F S  S T U M P  R U N', W/2, 54, 8, '#f2ead8', 'center');
+    txt('EUNGAI BRIGADE', W/2, 66, 8, '#f08c8c', 'center');
+    txt('JUMP THE STUMPS, GRAB RFS MEDALS,', W/2, 84, 8, '#fff', 'center');
+    txt('CHARGE UP AND SMASH THROUGH DANGER.', W/2, 93, 8, '#fff', 'center');
+    // controls card - keeps the scrolling scene from tangling with the text
+    g.globalAlpha=.88; P(60, 100, 200, 42, '#0d1016'); g.globalAlpha=1;
+    P(60, 100, 200, 1, '#3a4150'); P(60, 141, 200, 1, '#3a4150');
+    P(60, 100, 1, 42, '#3a4150'); P(259, 100, 1, 42, '#3a4150');
+    txt('JUMP',        W/2-8, 114, 8, '#c9b98a', 'right');
+    txt('SPACE / TAP', W/2+8, 114, 8, '#f6d868');
+    txt('SPECIAL',     W/2-8, 125, 8, '#c9b98a', 'right');
+    txt('CTRL / X',    W/2+8, 125, 8, '#f6d868');
+    txt('ESC PAUSE    M MUTE    F FULLSCREEN', W/2, 136, 7, '#8a8272', 'center');
+    if(hs>0) txt('BEST ' + hs, W/2, 155, 8, '#ffe9a8', 'center');
+    if((t>>4)%2===0) txt('PRESS SPACE / TAP TO START', W/2, 171, 9, '#ffd23e', 'center');
   }
   if(state==='paused'){
     g.globalAlpha=.55; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
