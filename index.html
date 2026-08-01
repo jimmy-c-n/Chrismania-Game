@@ -16,11 +16,13 @@
 <canvas id="c" width="320" height="180" aria-label="Chrismania: RFS Stump Run game"></canvas>
 <div id="rotate">Rotate your phone for the best view</div>
 <div id="status" class="sr" role="status" aria-live="polite"></div>
+<script src="settings.js"></script>
 <script>
 "use strict";
 /* ================= CONFIG =================
-   All tunables live here. Sizes are in internal pixels (320x180 canvas). */
-const CFG = {
+   Defaults only - tweak values in settings.js, which overrides these.
+   Sizes are in internal pixels (320x180 canvas). */
+const CFG = Object.assign({
   GRAVITY: 0.30,             // per 60Hz tick
   JUMP_VELOCITY: -6.0,
   JUMP_CUT: -2.2,            // release-early velocity cap (variable jump)
@@ -30,7 +32,8 @@ const CFG = {
   MAX_SPEED: 4.6,
   SPEED_RAMP: 0.00035,       // speed += dist * ramp
   SPAWN_MIN: 170, SPAWN_VAR: 150, SPAWN_SPEED_PAD: 22,
-  MEDAL_MIN: 260, MEDAL_VAR: 240,
+  BIG_STUMP_CHANCE: 0.3, PAIR_CHANCE: 0.2, PAIR_MIN_SPEED: 3.1,
+  MEDAL_MIN: 260, MEDAL_VAR: 240, MEDAL_ON_STUMP_CHANCE: 0.5,
   LIVES: 3,
   HITSTOP_TICKS: 14,         // freeze-frame on impact
   INVULN_TICKS: 100,         // flashing grace period after a hit
@@ -43,7 +46,7 @@ const CFG = {
   CLEAR_BONUS: 50,           // airborne stump clear
   MEDAL_BONUS: 25,
   DEBUG_COLLISION_BOXES: false
-};
+}, window.GAME_SETTINGS || {});
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const cv = document.getElementById('c'), g = cv.getContext('2d');
@@ -411,14 +414,14 @@ function update(){
   // spawn stumps - gaps always leave landing + reaction room
   nextSpawn -= speed;
   if(nextSpawn<=0){
-    const big = Math.random()<.3;
+    const big = Math.random()<CFG.BIG_STUMP_CHANCE;
     stumps.push({x:W+24, big, burn:0});
     let clusterW = 0;
-    if(!big && speed>3.1 && Math.random()<.2){
+    if(!big && speed>CFG.PAIR_MIN_SPEED && Math.random()<CFG.PAIR_CHANCE){
       stumps.push({x:W+24+24, big:false, burn:0});   // tight pair: one jump clears both
       clusterW = 24;
     }
-    if(Math.random()<.5){ medals.push({x:W+24+clusterW/2, y:GY-40-Math.random()*8}); nextMedal=CFG.MEDAL_MIN+Math.random()*CFG.MEDAL_VAR; }
+    if(Math.random()<CFG.MEDAL_ON_STUMP_CHANCE){ medals.push({x:W+24+clusterW/2, y:GY-40-Math.random()*8}); nextMedal=CFG.MEDAL_MIN+Math.random()*CFG.MEDAL_VAR; }
     nextSpawn = CFG.SPAWN_MIN + Math.random()*CFG.SPAWN_VAR + speed*CFG.SPAWN_SPEED_PAD + clusterW;
   }
   nextMedal -= speed;

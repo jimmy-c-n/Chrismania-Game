@@ -55,12 +55,14 @@ sheet" is the `drawTruck`/`drawStump`/`drawMedal` functions.
 
 ## Configuration
 
-Everything tunable lives in the `CFG` object at the top of the script:
-gravity, jump velocity and cut, jump buffer and coyote ticks, base/max speed
-and ramp, spawn spacing, medal frequency, lives, hitstop and invulnerability
-duration, `SPECIAL_CHARGE_REQUIRED`, special duration/active window/range/
-bonus, scoring values, and `DEBUG_COLLISION_BOXES` (set `true` to see all
-hitboxes and the special attack range).
+Everything tunable lives in **`settings.js`** — edit, save, refresh. Each
+setting is documented in the file: jump height (`JUMP_VELOCITY`) and distance
+(`GRAVITY`), jump buffer / coyote time, base/max speed and ramp-up rate,
+stump gap and randomness, big-stump and pair chances, lives, hitstop and
+invulnerability, medal frequency and `SPECIAL_CHARGE_REQUIRED`, special
+duration/active window/range, scoring bonuses, and `DEBUG_COLLISION_BOXES`
+(set `true` to see all hitboxes and the special attack range). Deleting a
+setting falls back to the default baked into `index.html`.
 
 Fixed-timestep 60 Hz update loop — consistent speed on any refresh rate,
 with clamped deltas after tab switches. `prefers-reduced-motion` reduces
