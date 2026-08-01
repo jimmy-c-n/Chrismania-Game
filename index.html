@@ -8,6 +8,11 @@
   html,body{margin:0;height:100%;background:#14161c;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none;font-family:monospace}
   #wrap{position:relative;width:min(100vw,177.7vh);aspect-ratio:16/9;max-height:100vh}
   canvas{position:absolute;inset:0;width:100%;height:100%}
+  /* fullscreen: fill the screen but letterbox to keep 16:9 pixels square */
+  #wrap:fullscreen{width:100vw;height:100vh;max-height:none;aspect-ratio:auto;background:#14161c}
+  #wrap:-webkit-full-screen{width:100vw;height:100vh;max-height:none;aspect-ratio:auto;background:#14161c}
+  #wrap:fullscreen canvas{inset:auto;left:50%;top:50%;transform:translate(-50%,-50%);width:min(100vw,177.78vh);height:min(56.25vw,100vh)}
+  #wrap:-webkit-full-screen canvas{inset:auto;left:50%;top:50%;transform:translate(-50%,-50%);width:min(100vw,177.78vh);height:min(56.25vw,100vh)}
   #c{image-rendering:pixelated;image-rendering:crisp-edges}
   #ui{pointer-events:none}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
@@ -152,6 +157,23 @@ function sfx(k){
 function toggleMute(){
   mute=!mute; ls.set('cm_mute', mute?'1':'0');
   if(mute) stopMusic(); else if(state==='play') startMusic();
+}
+
+/* ---------- fullscreen ---------- */
+const wrap = document.getElementById('wrap');
+const fsOK = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const isFs = ()=> !!(document.fullscreenElement || document.webkitFullscreenElement);
+function toggleFullscreen(){
+  if(!fsOK) return;
+  try{
+    if(!isFs()){
+      const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+      if(req) req.call(wrap);
+    } else {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if(exit) exit.call(document);
+    }
+  }catch(e){}
 }
 
 /* ---------- background music: urgent callout chiptune (no sirens) ---------- */
@@ -871,6 +893,28 @@ function txt(s, x, y, size, c, align, plain){
   ug.fillStyle = c; ug.fillText(s, x*S, y*S);
 }
 
+/* fullscreen / mute / pause icons, top-right (also the touch targets) */
+function drawIcons(){
+  const lit='#f2ead8', dim='#c9b98a';
+  if(fsOK){
+    P(W-54, 4, 14, 11, '#20242e');
+    const bx=W-51, by=6, c=isFs()?lit:dim;      // corner brackets
+    P(bx,by,3,1,c);     P(bx,by,1,2,c);
+    P(bx+6,by,3,1,c);   P(bx+8,by,1,2,c);
+    P(bx,by+6,3,1,c);   P(bx,by+5,1,2,c);
+    P(bx+6,by+6,3,1,c); P(bx+8,by+5,1,2,c);
+  }
+  // mute
+  P(W-36, 4, 14, 11, '#20242e');
+  P(W-33, 7, 3, 5, dim); P(W-30, 5, 2, 9, dim);
+  if(mute){ P(W-27, 6, 4, 1, '#e04a1e'); P(W-27, 9, 4, 1, '#e04a1e'); P(W-25, 7, 1, 3, '#e04a1e'); }
+  else { P(W-27, 7, 1, 5, dim); P(W-25, 6, 1, 7, dim); }
+  // pause / play
+  P(W-18, 4, 14, 11, '#20242e');
+  if(state==='paused'){ P(W-14, 6, 2, 7, dim); P(W-12, 7, 2, 5, dim); P(W-10, 8, 2, 3, dim); }
+  else { P(W-15, 6, 3, 7, dim); P(W-10, 6, 3, 7, dim); }
+}
+
 function draw(){
   g.save();
   const shx = shake>0 ? (Math.random()*2-1)*(RM?1:2)|0 : 0;
@@ -917,7 +961,7 @@ function draw(){
   // ---- HUD ----
   if(state!=='title'){
     txt('SCORE ' + String(Math.floor(score)).padStart(6,'0'), 6, 12, 9, '#fff');
-    txt('BEST ' + hs, W-40, 12, 9, '#ffe9a8', 'right');
+    txt('BEST ' + hs, W-58, 12, 9, '#ffe9a8', 'right');
     // special meter
     const ready = power>=CFG.SPECIAL_CHARGE_REQUIRED;
     for(let i=0;i<CFG.SPECIAL_CHARGE_REQUIRED;i++){
@@ -927,13 +971,6 @@ function draw(){
     txt(ready ? 'SPECIAL READY' : 'SPECIAL', 58, 24, 7, ready?'#ffd23e':'#c9b98a');
     // lives
     for(let i=0;i<CFG.LIVES;i++) drawHelmet(6+i*11, 29, i<lives);
-    // mute + pause icons (tap targets)
-    P(W-36, 4, 14, 11, '#20242e');
-    P(W-33, 7, 3, 5, '#c9b98a'); P(W-30, 5, 2, 9, '#c9b98a');
-    if(mute){ P(W-27, 6, 4, 1, '#e04a1e'); P(W-27, 9, 4, 1, '#e04a1e'); P(W-25, 7, 1, 3, '#e04a1e'); }
-    else { P(W-27, 7, 1, 5, '#c9b98a'); P(W-25, 6, 1, 7, '#c9b98a'); }
-    P(W-18, 4, 14, 11, '#20242e');
-    P(W-15, 6, 3, 7, '#c9b98a'); P(W-10, 6, 3, 7, '#c9b98a');
   }
   if(state==='title'){
     g.globalAlpha=.55; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
@@ -943,7 +980,7 @@ function draw(){
     txt('JUMP THE STUMPS, GRAB RFS MEDALS,', W/2, 102, 8, '#fff', 'center');
     txt('CHARGE THE POWER, SMASH THROUGH DANGER.', W/2, 112, 8, '#fff', 'center');
     txt('SPACE / TAP - JUMP    CTRL / X - SPECIAL', W/2, 130, 7, '#f6d868', 'center');
-    txt('ESC - PAUSE    M - MUTE', W/2, 140, 7, '#c9b98a', 'center');
+    txt('ESC - PAUSE   M - MUTE   F - FULLSCREEN', W/2, 140, 7, '#c9b98a', 'center');
     if(hs>0) txt('BEST ' + hs, W/2, 152, 8, '#ffe9a8', 'center');
     if((t>>4)%2===0) txt('PRESS SPACE / TAP TO START', W/2, 168, 9, '#ffd23e', 'center');
   }
@@ -961,6 +998,7 @@ function draw(){
     if(newBest && (t>>3)%2===0) txt('NEW BRIGADE RECORD!', W/2, 118, 8, '#ffd23e', 'center');
     if(dead>35 && (t>>4)%2===0) txt('SPACE / TAP TO GO AGAIN', W/2, 118+(newBest?12:0), 8, '#f2ead8', 'center');
   }
+  drawIcons();   // on top of every overlay so they stay tappable
   // touch special button (lower-left): STUMP SMASH! - jump is anywhere else
   if(state==='play'){
     const ready = power>=CFG.SPECIAL_CHARGE_REQUIRED && special<=0;
@@ -994,6 +1032,7 @@ addEventListener('keydown', e=>{
   else if(e.code==='ControlLeft' || e.code==='ControlRight' || e.code==='KeyX'){ doSpecial(); }
   else if(e.code==='Escape'){ state==='paused' ? resume() : pause(); }
   else if(e.code==='KeyM'){ toggleMute(); }
+  else if(e.code==='KeyF'){ toggleFullscreen(); }
 });
 addEventListener('keyup', e=>{
   if(e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW') endJump();
@@ -1002,12 +1041,14 @@ cv.addEventListener('pointerdown', e=>{
   e.preventDefault();
   const r = cv.getBoundingClientRect();
   const x = (e.clientX-r.left)/r.width*W, y = (e.clientY-r.top)/r.height*H;
-  if(state==='play'){
-    if(x>W-38 && x<W-20 && y<17){ toggleMute(); return; }
-    if(x>W-20 && y<17){ pause(); return; }
-    if(x<64 && y>H-36){ doSpecial(); return; }
-    jump(); return;
+  // icon row works in every state
+  if(y<18 && x>W-56){
+    if(x<W-38) toggleFullscreen();
+    else if(x<W-20) toggleMute();
+    else if(state==='paused') resume(); else pause();
+    return;
   }
+  if(state==='play' && x<64 && y>H-36){ doSpecial(); return; }
   jump();
 });
 cv.addEventListener('pointerup', endJump);
