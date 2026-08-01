@@ -33,7 +33,8 @@
 </div>
 <div id="rotate">Rotate your phone for the best view</div>
 <div id="status" class="sr" role="status" aria-live="polite"></div>
-<script src="settings.js"></script>
+<!-- cache-busted so an edited settings.js always takes effect on refresh -->
+<script>document.write('<script src="settings.js?v=' + Date.now() + '"><\/script>');</script>
 <script>
 "use strict";
 /* ================= CONFIG =================
