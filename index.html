@@ -56,6 +56,8 @@ const CFG = Object.assign({
   FIRE_EXTRA_HEIGHT: 6,      // extra hitbox height from the flames
   CAPTAIN_MIN_GAP: 2200,     // px between captain visits
   CAPTAIN_GAP_VAR: 2600,
+  BRETT_MIN_GAP: 3800,       // px between Brett appearances (much rarer than Steve)
+  BRETT_GAP_VAR: 3200,
   DEBUG_COLLISION_BOXES: false
 }, window.GAME_SETTINGS || {});
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -92,6 +94,18 @@ const NAGS = [
   ["SLOW DOWN,","CHRIS!"]
 ];
 let captain=null, nextCaptain=1400;
+
+/* Brett's perfectionist station wisdom - he IS an obstacle, jump him */
+const BRETT_NAGS = [
+  ["HOSES FOLDED","IN THIRDS, CHRIS!"],
+  ["LABEL EVERY","SINGLE VALVE!"],
+  ["THAT'S NOT HOW WE","STACK THE CUPS!"],
+  ["BOOTS POLISHED,","BOTH OF THEM!"],
+  ["LOG BOOK IN","BLACK PEN ONLY!"],
+  ["RE-ROLL THAT HOSE.","IT'S 2CM OFF!"],
+  ["THE BAY FLOOR","SHOULD SPARKLE!"]
+];
+let brett=null, nextBrett=2600;
 
 function announce(s){ statusEl.textContent = s; }
 
@@ -304,18 +318,108 @@ function drawMedal(m){
   if(((t+x)>>3)%3===0) P(x+((t>>2)+x)%8, y-2+((t>>3)%6), 1, 1, '#fffbe0');
 }
 
+/* ---------- Brett (Santa suit, station standards enforcer, solid obstacle) ---------- */
+function drawBrett(b){
+  const x=b.x|0, y=GY-(b.yo||0);
+  g.globalAlpha=.2; P(x-6,GY-1,13,2,'#3a2712'); g.globalAlpha=1;
+  if(b.fly){
+    // sent flying - ho ho no
+    P(x-6,y-12,12,6,'#c8362a');
+    P(x-9,y-14,4,4,'#e8b482');
+    P(x+6,y-8,4,3,'#1d2026');
+    P(x-2,y-16,6,3,'#f2f2ec');
+    return;
+  }
+  // boots
+  P(x-4,y-3,4,3,'#1d2026'); P(x+1,y-3,4,3,'#1d2026');
+  // red suit legs
+  P(x-3,y-8,3,5,'#c8362a'); P(x+1,y-8,3,5,'#c8362a');
+  // coat with white hem
+  P(x-4,y-15,9,7,'#c8362a');
+  P(x-4,y-9,9,1,'#f2f2ec');
+  // belt + buckle
+  P(x-4,y-12,9,2,'#1d2026'); P(x-1,y-12,2,2,'#e8b93e');
+  // lecturing finger, wagging at the truck
+  if((t>>3)&1){ P(x-8,y-15,4,2,'#c8362a'); P(x-9,y-16,2,2,'#f2f2ec'); P(x-11,y-16,2,1,'#e8b482'); }
+  else        { P(x-8,y-14,4,2,'#c8362a'); P(x-9,y-14,2,2,'#f2f2ec'); P(x-11,y-13,2,1,'#e8b482'); }
+  // other arm on hip
+  P(x+4,y-14,2,4,'#c8362a'); P(x+4,y-10,2,2,'#e8b482');
+  // head, facing left toward the truck
+  P(x-3,y-20,7,5,'#e8b482');
+  P(x-3,y-18,1,1,'#20242c'); P(x-1,y-18,1,1,'#20242c');
+  // big white beard
+  P(x-4,y-16,9,3,'#f2f2ec');
+  P(x-3,y-13,7,1,'#f2f2ec');
+  // santa hat: fur brim, cone flopped back, pom pom
+  P(x-4,y-22,9,2,'#f2f2ec');
+  P(x-4,y-24,8,2,'#c8362a');
+  P(x+1,y-26,4,2,'#c8362a');
+  P(x+4,y-27,3,3,'#f2f2ec');
+}
+
+/* ---------- the cow (responsible for the cowpat) ---------- */
+function drawCow(cw){
+  const x=cw.x|0, y=GY+6;
+  const squat = cw.squat>0 && !cw.pooped;
+  const step=(t>>3)&1;
+  g.globalAlpha=.2; P(x-4,y-1,24,2,'#3a2712'); g.globalAlpha=1;
+  // legs
+  if(squat){
+    P(x+1,y-5,3,5,'#e8e2d0'); P(x+13,y-3,4,3,'#e8e2d0');   // rear crouched
+  } else if(step){
+    P(x+1,y-5,3,5,'#e8e2d0'); P(x+6,y-4,3,4,'#e8e2d0'); P(x+12,y-5,3,5,'#e8e2d0'); P(x+16,y-4,3,4,'#e8e2d0');
+  } else {
+    P(x+2,y-4,3,4,'#e8e2d0'); P(x+7,y-5,3,5,'#e8e2d0'); P(x+13,y-4,3,4,'#e8e2d0'); P(x+17,y-5,3,5,'#e8e2d0');
+  }
+  // body, sagging at the back when squatting
+  const by = squat ? y-11 : y-12;
+  P(x, by, 19, 8, '#e8e2d0');
+  if(squat) P(x+12, y-6, 7, 3, '#e8e2d0');
+  // patches
+  P(x+3, by+1, 5, 4, '#20242c');
+  P(x+11, by+3, 5, 4, '#20242c');
+  P(x+16, by, 3, 3, '#20242c');
+  // head, facing left
+  P(x-5, y-14, 6, 6, '#e8e2d0');
+  P(x-4, y-15, 2, 2, '#20242c');     // ear
+  P(x-7, y-11, 3, 3, '#d9a8a0');     // muzzle
+  P(x-4, y-12, 1, 1, '#20242c');     // eye
+  // udder
+  P(x+11, y-4, 4, 2, '#e8b8b0');
+  // tail lifts when squatting
+  if(squat){ P(x+19, y-13, 2, 2, '#e8e2d0'); P(x+20, y-15, 2, 3, '#e8e2d0'); }
+  else { P(x+19, by, 1, 6, '#e8e2d0'); P(x+18, by+6, 2, 2, '#20242c'); }
+}
+
+/* ---------- barbed-wire fence (Steve's warm-up hurdle) ---------- */
+function drawFence(f){
+  const x=f.x|0, y=GY+6;
+  P(x,y-14,2,14,'#8a6a44'); P(x+15,y-14,2,14,'#8a6a44');   // posts
+  P(x,y-15,2,1,'#6b4f2c'); P(x+15,y-15,2,1,'#6b4f2c');
+  P(x-3,y-12,23,1,'#9aa0a8');                              // wires
+  P(x-3,y-8,23,1,'#9aa0a8');
+  P(x-3,y-4,23,1,'#9aa0a8');
+  for(let i=0;i<4;i++){                                    // barbs
+    P(x-2+i*6,y-13,1,3,'#9aa0a8');
+    P(x+1+i*6,y-9,1,3,'#9aa0a8');
+  }
+}
+
 /* ---------- Steve the captain (60ish, glasses, red helmet, not happy) ---------- */
 function drawCaptain(c){
-  const y = GY+6;                        // a touch forward of the truck's line
+  const gy = GY+6;                       // Steve's lane, a touch forward
   const x = c.x|0;
+  const y = gy - (c.yo||0);              // lifts when he hops the fence
+  if(c.cow) drawCow(c.cow);
+  if(c.fence) drawFence(c.fence);
   // the flaming cowpat - big enough to see coming
   if(c.pat){
     const px=c.pat.x|0, f=(t>>2)%3;
-    P(px-2,y-3,12,3,'#5a4226'); P(px-1,y-5,10,2,'#6b4f2c'); P(px+1,y-6,6,1,'#4a3620');
-    P(px,y-10,8,4,'#f78a1e'); P(px+2+(f===1?1:0),y-13,4,3,'#ffd23e'); P(px+3,y-15,2,2,'#fff8d8');
-    if((t&3)===0) spawn(px+4,y-12,(Math.random()-.5)*.4,-.6-Math.random()*.5,12,'#8f959d',1);
+    P(px-2,gy-3,12,3,'#5a4226'); P(px-1,gy-5,10,2,'#6b4f2c'); P(px+1,gy-6,6,1,'#4a3620');
+    P(px,gy-10,8,4,'#f78a1e'); P(px+2+(f===1?1:0),gy-13,4,3,'#ffd23e'); P(px+3,gy-15,2,2,'#fff8d8');
+    if((t&3)===0) spawn(px+4,gy-12,(Math.random()-.5)*.4,-.6-Math.random()*.5,12,'#8f959d',1);
   }
-  g.globalAlpha=.2; P(x-6,y-1,13,2,'#3a2712'); g.globalAlpha=1;
+  g.globalAlpha=.2; P(x-6,gy-1,13,2,'#3a2712'); g.globalAlpha=1;
   if(c.phase==='trip'){
     // face-first over the cowpat, helmet rolling away
     P(x-8,y-4,12,3,'#d8b93a');
@@ -472,6 +576,7 @@ function reset(){
   power=0; special=0; hitstop=0; invuln=0; redFlash=0; jumpBuf=0; coyote=0;
   nextSpawn=W+160; nextMedal=260; dead=0; newBest=false;
   captain=null; nextCaptain=1400;
+  brett=null; nextBrett=2600;
   announce('Game started');
 }
 function startJump(){ truck.vy=CFG.JUMP_VELOCITY; truck.ground=false; coyote=0; jumpBuf=0; sfx('jump'); }
@@ -502,6 +607,12 @@ function knockInRange(){
       smashed++; score += CFG.SPECIAL_DESTROY_BONUS; sfx('pop');
       for(let i=0;i<10;i++) spawn(s.x+SW(s)/2, GY-10, (Math.random()-.3)*3, -Math.random()*2.5, 22, ['#f78a1e','#ffd23e','#6b452c','#e2b26e'][i%4], 2);
     }
+  }
+  // Santa is not exempt from the STUMP SMASH
+  if(brett && !brett.fly && brett.x < fx + CFG.SPECIAL_ATTACK_RANGE && brett.x+6 > fx-6){
+    brett.fly=true; brett.vx=3; brett.vyo=3.5; brett.yo=0;
+    score += CFG.SPECIAL_DESTROY_BONUS; sfx('pop');
+    for(let i=0;i<8;i++) spawn(brett.x, GY-12, (Math.random()-.3)*3, -Math.random()*2.5, 22, ['#c8362a','#f2f2ec','#f78a1e'][i%3], 2);
   }
 }
 function hit(hitStump){
@@ -589,16 +700,52 @@ function update(){
     } else if(captain.phase==='chase'){
       captain.hold--;
       captain.x += (W/2+8 - captain.x)*.1;   // holds mid-screen, out in front of Chris
-      if(captain.hold<=0 && !captain.pat) captain.pat={x:W+12};   // here it comes...
+      // the setup: fence scrolls in, cow trots in behind it and does the deed
+      if(captain.hold<=80 && !captain.fence) captain.fence={x:W+20};
+      if(captain.fence){
+        captain.fence.x -= speed;
+        if(!captain.cow && captain.fence.x<=captain.x+120) captain.cow={x:W+30,squat:0,pooped:false};
+        if(!captain.jumped && captain.fence.x<=captain.x+16){ captain.vyo=2.8; captain.jumped=true; sfx('jump'); }
+      }
+      const cw=captain.cow;
+      if(cw){
+        if(!cw.pooped && cw.x<=captain.x+150){
+          cw.squat++; cw.x-=speed;           // pulls up, does the deed
+          if(cw.squat>=16){
+            cw.pooped=true; captain.pat={x:cw.x+20}; sfx('pop');
+            for(let i=0;i<4;i++) spawn(cw.x+19,GY+2-Math.random()*5,.2,.2+Math.random()*.3,12,'#5a4226',2);
+          }
+        } else cw.x -= speed + (cw.pooped ? .8 : 1.2);
+        if(cw.x<-45) captain.cow=null;
+      }
       if(captain.pat){
         captain.pat.x -= speed;
-        if(captain.pat.x <= captain.x+2){ captain.phase='trip'; sfx('pop'); }
+        if(captain.pat.x <= captain.x+4 && (captain.yo||0)<3){ captain.phase='trip'; sfx('pop'); }
       }
+      // fence-hop physics
+      if(captain.vyo || captain.yo){ captain.yo=(captain.yo||0)+captain.vyo; captain.vyo-=.3; if(captain.yo<=0){ captain.yo=0; captain.vyo=0; } }
     } else {
       captain.x -= speed;
       if(captain.pat) captain.pat.x -= speed;
+      if(captain.fence) captain.fence.x -= speed;
+      if(captain.cow) captain.cow.x -= speed+.8;
       if(captain.x < -40) captain=null;
     }
+  }
+
+  // Brett: rare Santa-suited obstacle dispensing station standards
+  nextBrett -= speed;
+  if(!brett && nextBrett<=0 && nextSpawn>70 && !stumps.some(s=>s.x>W-80)){
+    brett = { x: W+24, nag: BRETT_NAGS[(Math.random()*BRETT_NAGS.length)|0] };
+    nextBrett = CFG.BRETT_MIN_GAP + Math.random()*CFG.BRETT_GAP_VAR;
+    nextSpawn += 90;                       // landing room after Brett
+    sfx('nag');
+  }
+  if(brett){
+    if(brett.fly){ brett.x += brett.vx; brett.yo=(brett.yo||0)+brett.vyo; brett.vyo -= .28; }
+    else brett.x -= speed;
+    if(!brett.counted && !brett.fly && brett.x+6 < truck.x+6){ brett.counted=true; score += CFG.CLEAR_BONUS; }
+    if(brett && (brett.x < -40 || brett.x > W+80 || GY-(brett.yo||0) > H+30)) brett=null;
   }
 
   // airborne stump clears award score (medals are the only special charge)
@@ -634,6 +781,8 @@ function update(){
       const w = SW(s), h = SH(s) + (s.flame?CFG.FIRE_EXTRA_HEIGHT:0);
       if(truck.x+8 < s.x+w-2 && truck.x+44 > s.x+2 && truck.y-1 > GY-h+1){ hit(s); break; }
     }
+    // Brett is solid - jump him or wear it
+    if(invuln<=0 && brett && !brett.fly && truck.x+8 < brett.x+5 && truck.x+44 > brett.x-4 && truck.y-1 > GY-19) hit(brett);
   }
 }
 
@@ -656,6 +805,7 @@ function draw(){
   drawBg();
   for(const s of stumps) drawStump(s);
   for(const m of medals) drawMedal(m);
+  if(brett) drawBrett(brett);
 
   const tx = truck.x, ty = truck.y-27;
   const blink = invuln>0 && ((t>>2)&1)===0;
@@ -670,6 +820,7 @@ function draw(){
   if(captain) drawCaptain(captain);
   drawParts();
   if(captain && captain.phase!=='trip' && captain.x < W+10) drawBubble(captain);
+  if(brett && !brett.fly && brett.x > truck.x+70 && brett.x < W-10) drawBubble(brett);
 
   if(CFG.DEBUG_COLLISION_BOXES){
     g.globalAlpha=.5;

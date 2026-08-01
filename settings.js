@@ -92,7 +92,13 @@ window.GAME_SETTINGS = {
      Pixels of driving between his visits (min + random extra).
      Bigger numbers = he leaves Chris alone longer. */
   CAPTAIN_MIN_GAP: 2200,
-  CAPTAIN_GAP_VAR: 2600,
+  CAPTAIN_GAP_VAR: 2000,
+
+  /* ---------- BRETT (SANTA) ----------
+     Pixels between Brett appearances - he's a solid obstacle,
+     so keep him rarer than Steve. */
+  BRETT_MIN_GAP: 3800,
+  BRETT_GAP_VAR: 3200,
 
   /* ---------- DEBUG ----------
      true = draw hitboxes and the special attack range. */
