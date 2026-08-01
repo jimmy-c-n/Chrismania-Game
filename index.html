@@ -243,7 +243,12 @@ const spActive  = ()=> special>0 && spElapsed() >= CFG.SPECIAL_ACTIVE_START && s
 /* ---------- the polished sprite: Chris on the RFS truck ---------- */
 function drawTruck(tx, ty, anim){
   // tx = rear-left of body, ty = roof line. Wheels bottom = ty+27.
-  g.globalAlpha=.25; P(tx+2, ty+25, 46, 3, '#3a2712'); g.globalAlpha=1;
+  // shadow stays on the road while the truck jumps, shrinking and fading with height
+  const lift = Math.max(0, GY - truck.y);
+  const sw = Math.max(18, 46 - lift*0.42);
+  g.globalAlpha = Math.max(.06, .25 - lift*0.004);
+  P(tx + 2 + (46-sw)/2, GY-2, sw, 3, '#3a2712');
+  g.globalAlpha = 1;
 
   // chassis
   P(tx+2, ty+16, 42, 3, '#1c1f26');
