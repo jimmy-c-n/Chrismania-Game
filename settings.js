@@ -26,9 +26,9 @@ window.GAME_SETTINGS = {
      MAX_SPEED: the hard cap it ramps toward.
      SPEED_RAMP: how quickly it ramps. Bigger = faster ramp.
        0.0002 gentle cruise, 0.00035 default, 0.0008 sweaty. */
-  BASE_SPEED: 4,
-  MAX_SPEED: 6.6,
-  SPEED_RAMP: 0.00045,
+  BASE_SPEED: 4.2,
+  MAX_SPEED: 8,
+  SPEED_RAMP: 0.00025,
 
   /* ---------- STUMP SPAWNING ----------
      SPAWN_MIN: minimum gap between stumps in pixels (the truck
@@ -43,7 +43,7 @@ window.GAME_SETTINGS = {
   SPAWN_MIN: 130,
   SPAWN_VAR: 150,
   SPAWN_SPEED_PAD: 22,
-  BIG_STUMP_CHANCE: 0.3,
+  BIG_STUMP_CHANCE: 0.2,
   PAIR_CHANCE: 0.2,
   PAIR_MIN_SPEED: 3.1,
 
@@ -84,7 +84,7 @@ window.GAME_SETTINGS = {
      FIRE_EXTRA_HEIGHT px to the hitbox, so you must jump higher.
      FIRE_MIN_SPEED: no fire below this speed. FIRE_CHANCE: the
      odds at max speed (scales up between min and max). */
-  FIRE_MIN_SPEED: 3.4,
+  FIRE_MIN_SPEED: 4.2,
   FIRE_CHANCE: 0.45,
   FIRE_EXTRA_HEIGHT: 6,
 
@@ -115,8 +115,8 @@ window.GAME_SETTINGS = {
        edge). BRETT_HOLD_X: where he hangs about lecturing.
      BRETT_HOLD_TICKS: how long he stays there before drifting
        back into jumping range. */
-  STEVE_X: 168,
-  STEVE_Y_OFFSET: 6,
+  STEVE_X: 178,
+  STEVE_Y_OFFSET: 20,
   COW_POOP_OFFSET_X: 150,
   POOP_DELAY_TICKS: 120,
   BRETT_SPAWN_X: 344,
@@ -127,7 +127,7 @@ window.GAME_SETTINGS = {
   /* CAMEO_COOLDOWN: Steve and Brett are never on screen together.
      This is the px of driving after one leaves before the other
      can turn up, so they don't tag-team you. */
-  CAMEO_COOLDOWN: 600,
+  CAMEO_COOLDOWN: 800,
 
   /* ---------- MUSIC ----------
      MUSIC: false turns the chiptune off entirely.
@@ -136,7 +136,7 @@ window.GAME_SETTINGS = {
      MUSIC_SPEEDUP_RATIO: how much faster at max speed
        (0.5 = 50% faster, 1.0 = double time). */
   MUSIC: true,
-  MUSIC_VOLUME: 0.5,
+  MUSIC_VOLUME: 1,
   MUSIC_SPEEDUP: true,
   MUSIC_SPEEDUP_RATIO: 0.5,
 
@@ -145,7 +145,7 @@ window.GAME_SETTINGS = {
      SHOW_COW: the cow trots in and drops the pat first.
      SHOW_FENCE: the barbed-wire fence Steve hops before the pat.
      Both false = the pat just scrolls in on its own. */
-  SHOW_COW: true,
+  SHOW_COW: false,
   SHOW_FENCE: true,
 
   /* ---------- DEBUG ----------
