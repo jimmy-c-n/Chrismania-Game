@@ -26,9 +26,9 @@ window.GAME_SETTINGS = {
      MAX_SPEED: the hard cap it ramps toward.
      SPEED_RAMP: how quickly it ramps. Bigger = faster ramp.
        0.0002 gentle cruise, 0.00035 default, 0.0008 sweaty. */
-  BASE_SPEED: 2.0,
-  MAX_SPEED: 4.6,
-  SPEED_RAMP: 0.00035,
+  BASE_SPEED: 4,
+  MAX_SPEED: 6.6,
+  SPEED_RAMP: 0.00045,
 
   /* ---------- STUMP SPAWNING ----------
      SPAWN_MIN: minimum gap between stumps in pixels (the truck
@@ -40,7 +40,7 @@ window.GAME_SETTINGS = {
      BIG_STUMP_CHANCE: 0..1 odds a stump is the wide tall variant.
      PAIR_CHANCE: 0..1 odds of a tight double-stump (cleared in
        one jump). Only appears once speed passes PAIR_MIN_SPEED. */
-  SPAWN_MIN: 170,
+  SPAWN_MIN: 130,
   SPAWN_VAR: 150,
   SPAWN_SPEED_PAD: 22,
   BIG_STUMP_CHANCE: 0.3,
@@ -78,6 +78,21 @@ window.GAME_SETTINGS = {
   CLEAR_BONUS: 50,             // jumping a stump
   MEDAL_BONUS: 25,             // grabbing a medal
   SPECIAL_DESTROY_BONUS: 250,  // punching a stump
+
+  /* ---------- FIRE STUMPS ----------
+     At higher speeds stumps can be on fire - the flames add
+     FIRE_EXTRA_HEIGHT px to the hitbox, so you must jump higher.
+     FIRE_MIN_SPEED: no fire below this speed. FIRE_CHANCE: the
+     odds at max speed (scales up between min and max). */
+  FIRE_MIN_SPEED: 3.4,
+  FIRE_CHANCE: 0.45,
+  FIRE_EXTRA_HEIGHT: 6,
+
+  /* ---------- STEVE THE CAPTAIN ----------
+     Pixels of driving between his visits (min + random extra).
+     Bigger numbers = he leaves Chris alone longer. */
+  CAPTAIN_MIN_GAP: 2200,
+  CAPTAIN_GAP_VAR: 2600,
 
   /* ---------- DEBUG ----------
      true = draw hitboxes and the special attack range. */
