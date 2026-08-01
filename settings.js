@@ -118,17 +118,35 @@ window.GAME_SETTINGS = {
   STEVE_X: 168,
   STEVE_Y_OFFSET: 6,
   COW_POOP_OFFSET_X: 150,
-  POOP_DELAY_TICKS: 90,
+  POOP_DELAY_TICKS: 120,
   BRETT_SPAWN_X: 344,
   BRETT_Y_OFFSET: 0,
   BRETT_HOLD_X: 240,
   BRETT_HOLD_TICKS: 160,
 
+  /* CAMEO_COOLDOWN: Steve and Brett are never on screen together.
+     This is the px of driving after one leaves before the other
+     can turn up, so they don't tag-team you. */
+  CAMEO_COOLDOWN: 600,
+
   /* ---------- MUSIC ----------
-     Urgent chiptune that speeds up with the run.
-     MUSIC: false turns it off. MUSIC_VOLUME: 0..1. */
+     MUSIC: false turns the chiptune off entirely.
+     MUSIC_VOLUME: 0..1.
+     MUSIC_SPEEDUP: true = the song speeds up as the run does.
+     MUSIC_SPEEDUP_RATIO: how much faster at max speed
+       (0.5 = 50% faster, 1.0 = double time). */
   MUSIC: true,
   MUSIC_VOLUME: 0.5,
+  MUSIC_SPEEDUP: true,
+  MUSIC_SPEEDUP_RATIO: 0.5,
+
+  /* ---------- COMEDY BITS ----------
+     Turn parts of Steve's trip sequence on or off.
+     SHOW_COW: the cow trots in and drops the pat first.
+     SHOW_FENCE: the barbed-wire fence Steve hops before the pat.
+     Both false = the pat just scrolls in on its own. */
+  SHOW_COW: true,
+  SHOW_FENCE: true,
 
   /* ---------- DEBUG ----------
      true = draw hitboxes and the special attack range. */
