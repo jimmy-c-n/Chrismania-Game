@@ -75,6 +75,19 @@ let power=0, special=0, lives=CFG.LIVES;
 let hitstop=0, invuln=0, redFlash=0, jumpBuf=0, coyote=0;
 let dead=0, shake=0, mute = ls.get('cm_mute')==='1';
 
+/* the captain's greatest hits - short so they stay readable */
+const NAGS = [
+  ["CHRIS! THE HOSES!","AGAIN?!"],
+  ["WHAT HAVE YOU","DONE ALL DAY?!"],
+  ["YOU LEFT THE","SHED UNLOCKED!"],
+  ["GET BACK HERE,","CHRIS!"],
+  ["THAT'S BRIGADE","PROPERTY!"],
+  ["ROLL THE HOSES,","CHRIS!"],
+  ["THE LOG BOOK'S","EMPTY AGAIN!"],
+  ["SLOW DOWN,","CHRIS!"]
+];
+let captain=null, nextCaptain=700;
+
 function announce(s){ statusEl.textContent = s; }
 
 /* ---------- tiny sfx ---------- */
@@ -92,6 +105,7 @@ function sfx(k){
     else if(k==='punch'){ o.type='sawtooth'; o.frequency.setValueAtTime(120,n); o.frequency.exponentialRampToValueAtTime(30,n+.35); v.gain.setValueAtTime(.16,n); v.gain.exponentialRampToValueAtTime(.001,n+.4); o.start(n); o.stop(n+.42); }
     else if(k==='pop'){ o.type='square'; o.frequency.setValueAtTime(420,n); o.frequency.exponentialRampToValueAtTime(120,n+.1); v.gain.setValueAtTime(.06,n); v.gain.exponentialRampToValueAtTime(.001,n+.12); o.start(n); o.stop(n+.13); }
     else if(k==='crash'){ o.type='triangle'; o.frequency.setValueAtTime(150,n); o.frequency.exponentialRampToValueAtTime(28,n+.55); v.gain.setValueAtTime(.15,n); v.gain.exponentialRampToValueAtTime(.001,n+.6); o.start(n); o.stop(n+.62); }
+    else if(k==='nag'){ o.type='square'; o.frequency.setValueAtTime(520,n); o.frequency.setValueAtTime(390,n+.09); o.frequency.setValueAtTime(470,n+.18); v.gain.setValueAtTime(.06,n); v.gain.exponentialRampToValueAtTime(.001,n+.26); o.start(n); o.stop(n+.28); }
   }catch(e){}
 }
 function toggleMute(){ mute=!mute; ls.set('cm_mute', mute?'1':'0'); }
@@ -188,8 +202,7 @@ function drawTruck(tx, ty, anim){
   P(cx+0, hy-17, 1, 1, '#20242c');
   P(cx+3, hy-17, 1, 1, '#20242c');
   P(cx+0, hy-15, 4, 1, '#c08d60');   // 5 o'clock shadow on the lip
-  P(cx+0, hy-14, 3, 1, '#8a3324');
-  P(cx+1, hy-14, 2, 1, '#f2ead8');
+  P(cx+0, hy-14, 3, 1, '#8a3324');   // easy grin, no teeth
   // cap
   P(cx-4, hy-21, 9, 3, '#232836');
   P(cx-3, hy-22, 7, 1, '#2c3346');
@@ -249,6 +262,47 @@ function drawMedal(m){
   P(x+4, y+0, 2, 4, '#a87818');
   P(x+3, y+2, 4, 1, '#a87818');
   if(((t+x)>>3)%3===0) P(x+((t>>2)+x)%8, y-2+((t>>3)%6), 1, 1, '#fffbe0');
+}
+
+/* ---------- the captain (60ish, glasses, not happy) ---------- */
+function drawCaptain(c){
+  const x=c.x|0, y=GY;
+  const run=(t>>2)&1;
+  g.globalAlpha=.2; P(x-5,y-1,12,2,'#3a2712'); g.globalAlpha=1;
+  // legs - navy work pants mid-stride
+  if(run){ P(x-3,y-5,3,5,'#2c3140'); P(x+2,y-5,3,4,'#2c3140'); P(x-5,y-1,3,1,'#1d2026'); P(x+4,y-2,3,1,'#1d2026'); }
+  else   { P(x-1,y-5,3,5,'#2c3140'); P(x+2,y-4,2,4,'#2c3140'); P(x-2,y-1,3,1,'#1d2026'); P(x+3,y-1,3,1,'#1d2026'); }
+  // hi-vis RFS jacket with reflective stripe
+  P(x-4,y-12,9,8,'#d8b93a');
+  P(x-4,y-12,9,1,'#c0a22e');
+  P(x-4,y-9,9,1,'#e8e2d0');
+  // fist shaking at Chris
+  if((t>>3)&1){ P(x-7,y-16,3,3,'#e6b088'); P(x-6,y-13,2,2,'#d8b93a'); }
+  else        { P(x-7,y-12,3,3,'#e6b088'); P(x-6,y-13,2,1,'#d8b93a'); }
+  // head, facing left toward Chris
+  P(x-3,y-18,7,6,'#e6b088');
+  P(x-3,y-14,7,2,'#d9a077');            // jowls
+  // grey hair, receding
+  P(x-1,y-19,6,1,'#c9c9c9');
+  P(x+3,y-18,1,3,'#c9c9c9');
+  // glasses
+  P(x-3,y-16,2,2,'#dfe8f0'); P(x+0,y-16,2,2,'#dfe8f0');
+  P(x-1,y-16,1,1,'#20242c');
+  P(x+2,y-16,2,1,'#20242c');
+  // cranky mouth
+  P(x-2,y-13,3,1,'#7a4a3a');
+}
+function drawBubble(c){
+  const lines=c.nag;
+  const chars=Math.max(lines[0].length, lines[1].length);
+  const bw=chars*3.7+8, bh=20;
+  const bx=Math.min(Math.max(c.x-bw+6, 2), W-bw-2);
+  const by=GY-46;
+  P(bx,by,bw,bh,'#20242c'); P(bx+1,by+1,bw-2,bh-2,'#f8f4e8');
+  const tailX=Math.min(Math.max(c.x-2, bx+4), bx+bw-8);
+  P(tailX,by+bh,4,2,'#f8f4e8'); P(tailX+1,by+bh+2,2,2,'#f8f4e8');
+  txt(lines[0], bx+bw/2, by+8,  6, '#20242c', 'center', true);
+  txt(lines[1], bx+bw/2, by+16, 6, '#20242c', 'center', true);
 }
 
 /* ---------- particles ---------- */
@@ -344,6 +398,7 @@ function reset(){
   truck.y=GY; truck.vy=0; truck.ground=true;
   power=0; special=0; hitstop=0; invuln=0; redFlash=0; jumpBuf=0; coyote=0;
   nextSpawn=W+160; nextMedal=260; dead=0; newBest=false;
+  captain=null; nextCaptain=700;
   announce('Game started');
 }
 function startJump(){ truck.vy=CFG.JUMP_VELOCITY; truck.ground=false; coyote=0; jumpBuf=0; sfx('jump'); }
@@ -442,6 +497,19 @@ function update(){
   }
   for(const m of medals) m.x -= speed;
 
+  // the captain runs in to give Chris a serve, keeps pace, then falls behind
+  nextCaptain -= speed;
+  if(!captain && nextCaptain<=0){
+    captain = { x: W+24, hold: 170, nag: NAGS[(Math.random()*NAGS.length)|0] };
+    nextCaptain = 1000 + Math.random()*1200;
+    sfx('nag');
+  }
+  if(captain){
+    if(captain.hold>0 && captain.x <= truck.x+108) captain.hold--;
+    else captain.x -= speed + (captain.hold>0 ? 1.6 : .6);
+    if(captain.x < -30) captain=null;
+  }
+
   // airborne stump clears award score (medals are the only special charge)
   for(const s of stumps){
     if(!s.counted && !s.fly && s.burn===0 && s.x+SW(s) < truck.x+6){
@@ -479,10 +547,10 @@ function update(){
 }
 
 /* ---------- text (drawn on the 4x overlay so it stays sharp) ---------- */
-function txt(s, x, y, size, c, align){
+function txt(s, x, y, size, c, align, plain){
   ug.font = 'bold ' + (size*S) + 'px Consolas, Menlo, monospace';
   ug.textAlign = align||'left';
-  ug.fillStyle = '#1c1408'; ug.fillText(s, x*S+2, y*S+2);
+  if(!plain){ ug.fillStyle = '#1c1408'; ug.fillText(s, x*S+2, y*S+2); }
   ug.fillStyle = c; ug.fillText(s, x*S, y*S);
 }
 
@@ -497,6 +565,7 @@ function draw(){
   drawBg();
   for(const s of stumps) drawStump(s);
   for(const m of medals) drawMedal(m);
+  if(captain) drawCaptain(captain);
 
   const tx = truck.x, ty = truck.y-27;
   const blink = invuln>0 && ((t>>2)&1)===0;
@@ -506,9 +575,10 @@ function draw(){
   } else if(!blink){
     drawTruck(tx, ty, truck.ground && state==='play');
     if(spActive()) drawBurst(tx, ty);
-    if(special>0 && spActive() && (t>>2)%2===0) txt('POW!', tx+70, ty-14, 11, '#ffd23e');
+    if(special>0 && spActive() && (t>>2)%2===0) txt('STUMP SMASH!', tx+72, ty-14, 10, '#ffd23e');
   }
   drawParts();
+  if(captain && captain.hold>0 && captain.x < W+10) drawBubble(captain);
 
   if(CFG.DEBUG_COLLISION_BOXES){
     g.globalAlpha=.5;
