@@ -95,10 +95,40 @@ window.GAME_SETTINGS = {
   CAPTAIN_GAP_VAR: 2000,
 
   /* ---------- BRETT (SANTA) ----------
-     Pixels between Brett appearances - he's a solid obstacle,
-     so keep him rarer than Steve. */
+     Pixels between Brett appearances. Bumping him doesn't cost a
+     life - Santa just goes flying. */
   BRETT_MIN_GAP: 3800,
   BRETT_GAP_VAR: 3200,
+
+  /* ---------- CHARACTER POSITIONS & TIMING ----------
+     Canvas is 320 wide x 180 tall; the ground line is y=152.
+     X values are screen positions; Y offsets are px below the
+     ground line (positive = closer to the viewer).
+     STEVE_X: where Steve holds while running alongside.
+     STEVE_Y_OFFSET: Steve's lane (the fence, cow and cowpat
+       share it).
+     COW_POOP_OFFSET_X: how far ahead of Steve the cow stops to
+       do the deed.
+     POOP_DELAY_TICKS: how long Steve shouts (ticks, 60/sec)
+       before the fence-and-cow sequence starts.
+     BRETT_SPAWN_X: where Brett walks in (>320 = off the right
+       edge). BRETT_HOLD_X: where he hangs about lecturing.
+     BRETT_HOLD_TICKS: how long he stays there before drifting
+       back into jumping range. */
+  STEVE_X: 168,
+  STEVE_Y_OFFSET: 6,
+  COW_POOP_OFFSET_X: 150,
+  POOP_DELAY_TICKS: 90,
+  BRETT_SPAWN_X: 344,
+  BRETT_Y_OFFSET: 0,
+  BRETT_HOLD_X: 240,
+  BRETT_HOLD_TICKS: 160,
+
+  /* ---------- MUSIC ----------
+     Urgent chiptune that speeds up with the run.
+     MUSIC: false turns it off. MUSIC_VOLUME: 0..1. */
+  MUSIC: true,
+  MUSIC_VOLUME: 0.5,
 
   /* ---------- DEBUG ----------
      true = draw hitboxes and the special attack range. */

@@ -58,6 +58,16 @@ const CFG = Object.assign({
   CAPTAIN_GAP_VAR: 2600,
   BRETT_MIN_GAP: 3800,       // px between Brett appearances (much rarer than Steve)
   BRETT_GAP_VAR: 3200,
+  STEVE_X: 168,              // screen x where Steve holds while running alongside
+  STEVE_Y_OFFSET: 6,         // px below the ground line for Steve's lane (fence/cow/pat too)
+  COW_POOP_OFFSET_X: 150,    // px ahead of Steve where the cow stops to do the deed
+  POOP_DELAY_TICKS: 90,      // how long Steve shouts before the fence-and-cow sequence
+  BRETT_SPAWN_X: 344,        // screen x where Brett walks in (>320 = off the right edge)
+  BRETT_Y_OFFSET: 0,         // px below the ground line for Brett
+  BRETT_HOLD_X: 240,         // screen x where Brett hangs about lecturing
+  BRETT_HOLD_TICKS: 160,     // how long he stays there (60/sec)
+  MUSIC: true,               // background chiptune
+  MUSIC_VOLUME: 0.5,         // 0..1
   DEBUG_COLLISION_BOXES: false
 }, window.GAME_SETTINGS || {});
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -127,7 +137,45 @@ function sfx(k){
     else if(k==='nag'){ o.type='square'; o.frequency.setValueAtTime(520,n); o.frequency.setValueAtTime(390,n+.09); o.frequency.setValueAtTime(470,n+.18); v.gain.setValueAtTime(.06,n); v.gain.exponentialRampToValueAtTime(.001,n+.26); o.start(n); o.stop(n+.28); }
   }catch(e){}
 }
-function toggleMute(){ mute=!mute; ls.set('cm_mute', mute?'1':'0'); }
+function toggleMute(){
+  mute=!mute; ls.set('cm_mute', mute?'1':'0');
+  if(mute) stopMusic(); else if(state==='play') startMusic();
+}
+
+/* ---------- background music: urgent callout chiptune (no sirens) ---------- */
+const MEL  = [0,null,12,null, 7,3,7,null, 0,null,12,null, 8,7,3,null, 8,null,15,null, 12,8,12,null, 10,null,14,null, 12,10,7,5];
+const BARS = [0,0,8,10];
+let musicId=null, musicStep=0, musicNext=0;
+function mnote(f, when, dur, type, vol){
+  const o=AC.createOscillator(), v=AC.createGain();
+  o.type=type; o.frequency.value=f; o.connect(v); v.connect(AC.destination);
+  v.gain.setValueAtTime(vol, when);
+  v.gain.exponentialRampToValueAtTime(.001, when+dur);
+  o.start(when); o.stop(when+dur+.02);
+}
+function musicLoop(){
+  if(state!=='play' || mute || !CFG.MUSIC){ musicId=null; return; }
+  const V=CFG.MUSIC_VOLUME;
+  const prog = Math.max(0, Math.min(1, (speed-CFG.BASE_SPEED)/(CFG.MAX_SPEED-CFG.BASE_SPEED)));
+  const stepDur = .135 - .05*prog;   // urgency builds as the run speeds up
+  while(musicNext < AC.currentTime + .25){
+    const s=musicStep%32, m=MEL[s];
+    if(m!==null) mnote(220*Math.pow(2,m/12), musicNext, .09, 'square', .05*V);
+    mnote(110*Math.pow(2,BARS[(s>>3)%4]/12), musicNext, .08, 'sawtooth', .045*V);  // driving 8th-note bass
+    if((s&1)===1) mnote(5200, musicNext, .02, 'square', .012*V);                   // hat tick
+    musicNext += stepDur; musicStep++;
+  }
+  musicId = setTimeout(musicLoop, 60);
+}
+function startMusic(){
+  if(mute || !CFG.MUSIC || musicId) return;
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    musicNext = Math.max(musicNext, AC.currentTime + .05);
+    musicLoop();
+  }catch(e){}
+}
+function stopMusic(){ if(musicId){ clearTimeout(musicId); musicId=null; } }
 
 /* ---------- special-move phase helpers ---------- */
 const spElapsed = ()=> CFG.SPECIAL_DURATION - special;
@@ -320,8 +368,9 @@ function drawMedal(m){
 
 /* ---------- Brett (Santa suit, station standards enforcer, solid obstacle) ---------- */
 function drawBrett(b){
-  const x=b.x|0, y=GY-(b.yo||0);
-  g.globalAlpha=.2; P(x-6,GY-1,13,2,'#3a2712'); g.globalAlpha=1;
+  const gy0 = GY + CFG.BRETT_Y_OFFSET;
+  const x=b.x|0, y=gy0-(b.yo||0);
+  g.globalAlpha=.2; P(x-6,gy0-1,13,2,'#3a2712'); g.globalAlpha=1;
   if(b.fly){
     // sent flying - ho ho no
     P(x-6,y-12,12,6,'#c8362a');
@@ -359,7 +408,7 @@ function drawBrett(b){
 
 /* ---------- the cow (responsible for the cowpat) ---------- */
 function drawCow(cw){
-  const x=cw.x|0, y=GY+6;
+  const x=cw.x|0, y=GY+CFG.STEVE_Y_OFFSET;
   const squat = cw.squat>0 && !cw.pooped;
   const step=(t>>3)&1;
   g.globalAlpha=.2; P(x-4,y-1,24,2,'#3a2712'); g.globalAlpha=1;
@@ -393,7 +442,7 @@ function drawCow(cw){
 
 /* ---------- barbed-wire fence (Steve's warm-up hurdle) ---------- */
 function drawFence(f){
-  const x=f.x|0, y=GY+6;
+  const x=f.x|0, y=GY+CFG.STEVE_Y_OFFSET;
   P(x,y-14,2,14,'#8a6a44'); P(x+15,y-14,2,14,'#8a6a44');   // posts
   P(x,y-15,2,1,'#6b4f2c'); P(x+15,y-15,2,1,'#6b4f2c');
   P(x-3,y-12,23,1,'#9aa0a8');                              // wires
@@ -407,7 +456,7 @@ function drawFence(f){
 
 /* ---------- Steve the captain (60ish, glasses, red helmet, not happy) ---------- */
 function drawCaptain(c){
-  const gy = GY+6;                       // Steve's lane, a touch forward
+  const gy = GY + CFG.STEVE_Y_OFFSET;    // Steve's lane
   const x = c.x|0;
   const y = gy - (c.yo||0);              // lifts when he hops the fence
   if(c.cow) drawCow(c.cow);
@@ -577,6 +626,7 @@ function reset(){
   nextSpawn=W+160; nextMedal=260; dead=0; newBest=false;
   captain=null; nextCaptain=1400;
   brett=null; nextBrett=2600;
+  startMusic();
   announce('Game started');
 }
 function startJump(){ truck.vy=CFG.JUMP_VELOCITY; truck.ground=false; coyote=0; jumpBuf=0; sfx('jump'); }
@@ -623,15 +673,15 @@ function hit(hitStump){
   hitStump.fly=true; hitStump.vx=3; hitStump.vyo=3.5; hitStump.yo=0;
   for(let i=0;i<16;i++) spawn(truck.x+40+Math.random()*10, GY-14+Math.random()*10, (Math.random()-.4)*2.5, -Math.random()*2, 26, ['#9aa0a8','#f78a1e','#6b452c'][i%3], 2);
   if(lives<=0){
-    state='over'; dead=0;
+    state='over'; dead=0; stopMusic();
     if(Math.floor(score)>hs){ hs=Math.floor(score); newBest=true; ls.set('cm_hs', hs); }
     announce('Game over. Score ' + Math.floor(score));
   } else {
     announce(lives + (lives===1?' life':' lives') + ' remaining');
   }
 }
-function pause(){ if(state==='play'){ state='paused'; announce('Paused'); } }
-function resume(){ if(state==='paused'){ state='play'; announce('Resumed'); } }
+function pause(){ if(state==='play'){ state='paused'; stopMusic(); announce('Paused'); } }
+function resume(){ if(state==='paused'){ state='play'; startMusic(); announce('Resumed'); } }
 
 function update(){
   t++;
@@ -689,27 +739,27 @@ function update(){
   // then trips into a flaming cowpat and is gone
   nextCaptain -= speed;
   if(!captain && nextCaptain<=0){
-    captain = { x: W+24, phase:'in', hold: 170, nag: NAGS[(Math.random()*NAGS.length)|0] };
+    captain = { x: W+24, phase:'in', hold: CFG.POOP_DELAY_TICKS, nag: NAGS[(Math.random()*NAGS.length)|0] };
     nextCaptain = CFG.CAPTAIN_MIN_GAP + Math.random()*CFG.CAPTAIN_GAP_VAR;
     sfx('nag');
   }
   if(captain){
     if(captain.phase==='in'){
       captain.x -= speed + 1.6;
-      if(captain.x <= W/2+8) captain.phase='chase';
+      if(captain.x <= CFG.STEVE_X) captain.phase='chase';
     } else if(captain.phase==='chase'){
       captain.hold--;
-      captain.x += (W/2+8 - captain.x)*.1;   // holds mid-screen, out in front of Chris
+      captain.x += (CFG.STEVE_X - captain.x)*.1;   // holds position out in front of Chris
       // the setup: fence scrolls in, cow trots in behind it and does the deed
-      if(captain.hold<=80 && !captain.fence) captain.fence={x:W+20};
+      if(captain.hold<=0 && !captain.fence) captain.fence={x:W+20};
       if(captain.fence){
         captain.fence.x -= speed;
-        if(!captain.cow && captain.fence.x<=captain.x+120) captain.cow={x:W+30,squat:0,pooped:false};
+        if(!captain.cow && captain.fence.x<=captain.x+CFG.COW_POOP_OFFSET_X-30) captain.cow={x:W+30,squat:0,pooped:false};
         if(!captain.jumped && captain.fence.x<=captain.x+16){ captain.vyo=2.8; captain.jumped=true; sfx('jump'); }
       }
       const cw=captain.cow;
       if(cw){
-        if(!cw.pooped && cw.x<=captain.x+150){
+        if(!cw.pooped && cw.x<=captain.x+CFG.COW_POOP_OFFSET_X){
           cw.squat++; cw.x-=speed;           // pulls up, does the deed
           if(cw.squat>=16){
             cw.pooped=true; captain.pat={x:cw.x+20}; sfx('pop');
@@ -736,13 +786,14 @@ function update(){
   // Brett: rare Santa-suited obstacle dispensing station standards
   nextBrett -= speed;
   if(!brett && nextBrett<=0 && nextSpawn>70 && !stumps.some(s=>s.x>W-80)){
-    brett = { x: W+24, nag: BRETT_NAGS[(Math.random()*BRETT_NAGS.length)|0] };
+    brett = { x: CFG.BRETT_SPAWN_X, hold: CFG.BRETT_HOLD_TICKS, nag: BRETT_NAGS[(Math.random()*BRETT_NAGS.length)|0] };
     nextBrett = CFG.BRETT_MIN_GAP + Math.random()*CFG.BRETT_GAP_VAR;
     nextSpawn += 90;                       // landing room after Brett
     sfx('nag');
   }
   if(brett){
     if(brett.fly){ brett.x += brett.vx; brett.yo=(brett.yo||0)+brett.vyo; brett.vyo -= .28; }
+    else if(brett.hold>0 && brett.x <= CFG.BRETT_HOLD_X) brett.hold--;   // hangs about so you can read the lecture
     else brett.x -= speed;
     if(!brett.counted && !brett.fly && brett.x+6 < truck.x+6){ brett.counted=true; score += CFG.CLEAR_BONUS; }
     if(brett && (brett.x < -40 || brett.x > W+80 || GY-(brett.yo||0) > H+30)) brett=null;
@@ -781,8 +832,11 @@ function update(){
       const w = SW(s), h = SH(s) + (s.flame?CFG.FIRE_EXTRA_HEIGHT:0);
       if(truck.x+8 < s.x+w-2 && truck.x+44 > s.x+2 && truck.y-1 > GY-h+1){ hit(s); break; }
     }
-    // Brett is solid - jump him or wear it
-    if(invuln<=0 && brett && !brett.fly && truck.x+8 < brett.x+5 && truck.x+44 > brett.x-4 && truck.y-1 > GY-19) hit(brett);
+  }
+  // Brett is a soft obstacle - bumping him just sends Santa flying, no damage
+  if(brett && !brett.fly && truck.x+8 < brett.x+5 && truck.x+44 > brett.x-4 && truck.y-1 > GY+CFG.BRETT_Y_OFFSET-19){
+    brett.fly=true; brett.vx=3; brett.vyo=3.5; brett.yo=0; sfx('pop');
+    for(let i=0;i<8;i++) spawn(brett.x, GY-12, (Math.random()-.3)*2.5, -Math.random()*2.2, 22, ['#c8362a','#f2f2ec'][i%2], 2);
   }
 }
 
