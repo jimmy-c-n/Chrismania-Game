@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chrismania: RFS Stump Run</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>
+  html,body{margin:0;height:100%;background:#14161c;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none;font-family:monospace}
+  canvas{image-rendering:pixelated;image-rendering:crisp-edges;width:min(100vw,177.7vh);aspect-ratio:16/9;max-height:100vh}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  #rotate{display:none;position:fixed;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#20242ecc;color:#f2ead8;padding:6px 12px;border-radius:4px;font-size:12px;pointer-events:none}
+  @media (orientation:portrait) and (max-width:600px){ #rotate{display:block} }
+</style>
+</head>
+<body>
+<canvas id="c" width="320" height="180" aria-label="Chrismania: RFS Stump Run game"></canvas>
+<div id="rotate">Rotate your phone for the best view</div>
+<div id="status" class="sr" role="status" aria-live="polite"></div>
+<script>
+"use strict";
+/* ================= CONFIG =================
+   All tunables live here. Sizes are in internal pixels (320x180 canvas). */
+const CFG = {
+  GRAVITY: 0.30,             // per 60Hz tick
+  JUMP_VELOCITY: -6.0,
+  JUMP_CUT: -2.2,            // release-early velocity cap (variable jump)
+  JUMP_BUFFER_TICKS: 7,      // press slightly before landing still jumps
+  COYOTE_TICKS: 5,           // grace after leaving the ground
+  BASE_SPEED: 2.0,
+  MAX_SPEED: 4.6,
+  SPEED_RAMP: 0.00035,       // speed += dist * ramp
+  SPAWN_MIN: 170, SPAWN_VAR: 150, SPAWN_SPEED_PAD: 22,
+  MEDAL_MIN: 260, MEDAL_VAR: 240,
+  LIVES: 3,
+  HITSTOP_TICKS: 14,         // freeze-frame on impact
+  INVULN_TICKS: 100,         // flashing grace period after a hit
+  SPECIAL_CHARGE_REQUIRED: 5,
+  SPECIAL_DURATION: 48,      // ~0.8s @60
+  SPECIAL_ACTIVE_START: 12,  // windup ends   (~0.25)
+  SPECIAL_ACTIVE_END: 31,    // strike ends   (~0.65)
+  SPECIAL_ATTACK_RANGE: 150, // px ahead of the bull bar
+  SPECIAL_DESTROY_BONUS: 250,
+  CLEAR_BONUS: 50,           // airborne stump clear
+  MEDAL_BONUS: 25,
+  DEBUG_COLLISION_BOXES: false
+};
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const statusEl = document.getElementById('status');
+g.imageSmoothingEnabled = false;
+const W = 320, H = 180, GY = 152;
+const P = (x,y,w,h,c)=>{ g.fillStyle=c; g.fillRect(x|0,y|0,Math.ceil(w),Math.ceil(h)); };
+const ls = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+
+let state='title', t=0, dist=0, speed=CFG.BASE_SPEED, score=0, stumpsCleared=0, smashed=0;
+let hs = +(ls.get('cm_hs')||0), newBest=false;
+const truck = { x:42, y:GY, vy:0, ground:true };
+let stumps=[], medals=[], parts=[], nextSpawn=W+160, nextMedal=200;
+let power=0, special=0, lives=CFG.LIVES;
+let hitstop=0, invuln=0, redFlash=0, jumpBuf=0, coyote=0;
+let dead=0, shake=0, mute = ls.get('cm_mute')==='1';
+
+function announce(s){ statusEl.textContent = s; }
+
+/* ---------- tiny sfx ---------- */
+let AC=null;
+function sfx(k){
+  if(mute) return;
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const o=AC.createOscillator(), v=AC.createGain(); o.connect(v); v.connect(AC.destination);
+    const n=AC.currentTime;
+    if(k==='jump'){ o.type='square'; o.frequency.setValueAtTime(230,n); o.frequency.exponentialRampToValueAtTime(540,n+.12); v.gain.setValueAtTime(.07,n); v.gain.exponentialRampToValueAtTime(.001,n+.18); o.start(n); o.stop(n+.2); }
+    else if(k==='land'){ o.type='square'; o.frequency.setValueAtTime(160,n); o.frequency.exponentialRampToValueAtTime(90,n+.07); v.gain.setValueAtTime(.05,n); v.gain.exponentialRampToValueAtTime(.001,n+.09); o.start(n); o.stop(n+.1); }
+    else if(k==='medal'){ o.type='sine'; o.frequency.setValueAtTime(920,n); o.frequency.exponentialRampToValueAtTime(1500,n+.09); v.gain.setValueAtTime(.09,n); v.gain.exponentialRampToValueAtTime(.001,n+.16); o.start(n); o.stop(n+.17); }
+    else if(k==='ready'){ o.type='square'; o.frequency.setValueAtTime(660,n); o.frequency.setValueAtTime(880,n+.09); o.frequency.setValueAtTime(1320,n+.18); v.gain.setValueAtTime(.08,n); v.gain.exponentialRampToValueAtTime(.001,n+.3); o.start(n); o.stop(n+.32); }
+    else if(k==='punch'){ o.type='sawtooth'; o.frequency.setValueAtTime(120,n); o.frequency.exponentialRampToValueAtTime(30,n+.35); v.gain.setValueAtTime(.16,n); v.gain.exponentialRampToValueAtTime(.001,n+.4); o.start(n); o.stop(n+.42); }
+    else if(k==='pop'){ o.type='square'; o.frequency.setValueAtTime(420,n); o.frequency.exponentialRampToValueAtTime(120,n+.1); v.gain.setValueAtTime(.06,n); v.gain.exponentialRampToValueAtTime(.001,n+.12); o.start(n); o.stop(n+.13); }
+    else if(k==='crash'){ o.type='triangle'; o.frequency.setValueAtTime(150,n); o.frequency.exponentialRampToValueAtTime(28,n+.55); v.gain.setValueAtTime(.15,n); v.gain.exponentialRampToValueAtTime(.001,n+.6); o.start(n); o.stop(n+.62); }
+  }catch(e){}
+}
+function toggleMute(){ mute=!mute; ls.set('cm_mute', mute?'1':'0'); }
+
+/* ---------- special-move phase helpers ---------- */
+const spElapsed = ()=> CFG.SPECIAL_DURATION - special;
+const spWindup  = ()=> special>0 && spElapsed() <  CFG.SPECIAL_ACTIVE_START;
+const spActive  = ()=> special>0 && spElapsed() >= CFG.SPECIAL_ACTIVE_START && spElapsed() < CFG.SPECIAL_ACTIVE_END;
+
+/* ---------- the polished sprite: Chris on the RFS truck ---------- */
+function drawTruck(tx, ty, anim){
+  // tx = rear-left of body, ty = roof line. Wheels bottom = ty+27.
+  g.globalAlpha=.25; P(tx+2, ty+25, 46, 3, '#3a2712'); g.globalAlpha=1;
+
+  // chassis
+  P(tx+2, ty+16, 42, 3, '#1c1f26');
+
+  // --- rear pump body ---
+  P(tx,   ty,    28, 16, '#d63a2a');
+  P(tx,   ty-2,  28, 3,  '#262b36');
+  P(tx+1, ty-3,  26, 1,  '#323848');
+  P(tx,   ty+13, 28, 3,  '#a52618');
+  P(tx,   ty+7,  28, 4,  '#f2ead8');
+  P(tx,   ty+11, 28, 2,  '#f0871c');
+  for(let i=3;i<27;i+=5) P(tx+i, ty+1, 1, 6, '#b92c1e');
+  P(tx, ty+1, 2, 3, '#ffd23e');
+  P(tx, ty+12, 2, 1, '#ffd23e');
+
+  // --- cab ---
+  P(tx+28, ty-2, 16, 18, '#d63a2a');
+  P(tx+28, ty+13, 16, 3, '#a52618');
+  P(tx+28, ty+7, 16, 4, '#f2ead8');
+  P(tx+28, ty+11, 16, 2, '#f0871c');
+  P(tx+30, ty, 11, 6, '#b8d8e8');
+  P(tx+38, ty+1, 2, 4, '#e9f5fb');
+  P(tx+30, ty+5, 11, 1, '#8fb6c9');
+  const on = (t>>3)&1;
+  P(tx+29, ty-5, 5, 3, on ? '#4d7ef2' : '#2a4da8');
+  P(tx+34, ty-5, 5, 3, on ? '#c8362a' : '#f25a4d');
+  P(tx+29, ty-6, 10, 1, '#20242e');
+  P(tx+43, ty+5, 3, 12, '#d63a2a');
+  P(tx+44, ty+7, 3, 4, '#ffd23e');
+  P(tx+43, ty+14, 5, 3, '#c9ccd2');
+  P(tx+46, ty+4, 2, 11, '#9aa0a8');
+
+  // --- wheels ---
+  wheel(tx+9,  ty+21, anim);
+  wheel(tx+35, ty+21, anim);
+
+  // --- Chris riding on top of the pump body ---
+  const cx = tx+13, bob = truck.ground ? ((t>>4)&1) : 0;
+  const hy = ty - bob;
+  // torso: dark navy RFS shirt, torn open showing chest
+  P(cx-4, hy-12, 10, 10, '#2c3140');
+  P(cx-4, hy-12, 10, 1,  '#3d445a');
+  P(cx-1, hy-10, 4, 6,   '#e0a878');
+  P(cx-1, hy-7,  4, 1,   '#c98a5e');
+  P(cx+0, hy-10, 1, 3,   '#c98a5e');
+  P(cx-4, hy-9,  1, 2,   '#e0a878');
+  P(cx-3, hy-11, 1, 1,   '#e8e2d0');
+  // forward arm gripping the light bar
+  P(cx+5,  hy-10, 3, 3, '#e0a878');
+  P(cx+8,  hy-9,  4, 2, '#d89a68');
+  P(cx+11, hy-8,  3, 3, '#e0a878');
+  // back arm: the buff special arm, or a fist pump
+  if(spWindup()){
+    // wound back, charging with fire
+    P(cx-6, hy-12, 6, 4, '#e0a878');
+    P(cx-11, hy-14, 6, 6, '#d89a68');   // oversized fist cocked
+    if((t&1)===0) spawn(cx-8+Math.random()*4, hy-16, (Math.random()-.5), -Math.random(), 8, Math.random()<.5?'#f78a1e':'#ffd23e', 1);
+  } else if(spActive()){
+    // massive buff arm punched forward
+    P(cx+2, hy-14, 13, 5, '#e0a878');
+    P(cx+6, hy-15, 9, 2,  '#d89a68');   // bicep bulge
+    P(cx+15, hy-16, 8, 8, '#d89a68');   // huge fist
+    P(cx+15, hy-16, 8, 2, '#f0c896');
+    P(cx+24, hy-14, 5, 1, '#fff8d8');   // motion lines
+    P(cx+24, hy-10, 5, 1, '#fff8d8');
+  } else if(special>0){
+    // recovery: arm coming back
+    P(cx+1, hy-12, 8, 4, '#e0a878');
+    P(cx+8, hy-12, 4, 4, '#d89a68');
+  } else if(((t>>3)&1)===0){
+    P(cx-8, hy-13, 3, 4, '#e0a878');
+    P(cx-8, hy-16, 3, 3, '#d89a68');
+  } else {
+    P(cx-8, hy-11, 3, 4, '#e0a878');
+    P(cx-9, hy-12, 3, 2, '#d89a68');
+  }
+  // head
+  P(cx-3, hy-19, 8, 7, '#e8b482');
+  P(cx-3, hy-14, 8, 2, '#dca674');
+  P(cx+4, hy-18, 1, 5, '#d89a68');
+  P(cx+0, hy-17, 1, 1, '#20242c');
+  P(cx+3, hy-17, 1, 1, '#20242c');
+  P(cx+0, hy-15, 4, 1, '#4a3322');
+  P(cx+0, hy-14, 3, 1, '#8a3324');
+  P(cx+1, hy-14, 2, 1, '#f2ead8');
+  // cap
+  P(cx-4, hy-21, 9, 3, '#232836');
+  P(cx-3, hy-22, 7, 1, '#2c3346');
+  P(cx+4, hy-19, 5, 1, '#161a24');
+  P(cx-1, hy-21, 2, 1, '#c8402e');
+}
+
+function wheel(wx, wy, anim){
+  P(wx-5, wy-4, 10, 9, '#1d2026');
+  P(wx-4, wy-5, 8, 11, '#1d2026');
+  P(wx-2, wy-2, 5, 5, '#98a0a8');
+  const f = anim ? (t>>2)%4 : 0;
+  g.fillStyle='#4a505c';
+  if(f===0||f===2) g.fillRect(wx-2, wy, 5, 1); else g.fillRect(wx, wy-2, 1, 5);
+  P(wx, wy, 1, 1, '#1d2026');
+}
+
+/* ---------- stump (top-down cut face + root) ---------- */
+const SW = s => s.big?22:16;
+const SH = s => s.big?17:13;
+function drawStump(s){
+  const x = s.x|0, w = SW(s), bh = s.big?11:8;
+  const gy = GY - (s.yo||0);
+  const burnt = s.burn>0;
+  const bark  = burnt ? '#3a2a1c' : '#6b452c';
+  const barkD = burnt ? '#2a1e14' : '#573823';
+  const face  = burnt ? '#7a5a38' : '#e2b26e';
+  const ring  = burnt ? '#5c4228' : '#b9854a';
+  // root snaking out the front
+  P(x-7, gy-4, 8, 3, bark);
+  P(x-12, gy-3, 6, 3, barkD);
+  P(x-6, gy-6, 3, 2, bark);
+  P(x-15, gy-2, 4, 2, barkD);
+  P(x-10, gy-5, 2, 2, bark);
+  // bark side
+  P(x, gy-bh, w, bh, bark);
+  for(let i=2;i<w-1;i+=4) P(x+i, gy-bh+1, 1, bh-1, barkD);
+  P(x, gy-1, w, 1, barkD);
+  // top face (the "top down" cut)
+  P(x-1, gy-bh-5, w+2, 5, face);
+  P(x+1, gy-bh-6, w-2, 1, face);
+  P(x-1, gy-bh-5, w+2, 1, burnt?'#8a6a44':'#f0cb8c');
+  // growth rings
+  P(x+2, gy-bh-4, w-4, 3, ring);
+  P(x+4, gy-bh-3, w-8, 2, face);
+  P(x+(w>>1)-1, gy-bh-3, 2, 1, burnt?'#3a2a1c':'#8a5a30');
+}
+
+/* ---------- RFS medal pickup ---------- */
+function drawMedal(m){
+  const x = m.x|0, y = (m.y + Math.sin((t+m.x)*.09)*2)|0;
+  P(x+2, y-6, 6, 4, '#c8362a');
+  P(x+4, y-6, 2, 4, '#f2ead8');
+  P(x+1, y-2, 8, 8, '#e8b93e');
+  P(x+2, y-3, 6, 10, '#e8b93e');
+  P(x+2, y-1, 6, 6, '#f6d868');
+  P(x+4, y+0, 2, 4, '#a87818');
+  P(x+3, y+2, 4, 1, '#a87818');
+  if(((t+x)>>3)%3===0) P(x+((t>>2)+x)%8, y-2+((t>>3)%6), 1, 1, '#fffbe0');
+}
+
+/* ---------- particles ---------- */
+function spawn(x,y,vx,vy,life,c,s){ parts.push({x,y,vx,vy,life,max:life,c,s:s||1}); }
+function dustBurst(){ for(let i=0;i<8;i++) spawn(truck.x+6+Math.random()*30, GY-2, -speed*.4-Math.random(), -Math.random()*1.4, 20+Math.random()*12, Math.random()<.5?'#c9a878':'#b08d5e', 2); }
+function updateParts(){
+  for(const p of parts){ p.x+=p.vx; p.y+=p.vy; p.vy+=.04; p.life--; }
+  parts = parts.filter(p=>p.life>0);
+}
+function drawParts(){
+  for(const p of parts){ g.globalAlpha = Math.min(1, p.life/p.max + .2); P(p.x, p.y, p.s, p.s, p.c); }
+  g.globalAlpha = 1;
+}
+
+/* ---------- background ---------- */
+const hills = [], trees = [];
+for(let i=0;i<7;i++)  hills.push({x:i*62+((i*53)%30), w:70+(i*37)%40, h:14+(i*29)%12});
+for(let i=0;i<9;i++)  trees.push({x:i*48+((i*71)%25), h:16+(i*31)%10});
+function drawBg(){
+  P(0,0,W,52,'#7fc4e8'); P(0,52,W,28,'#a5d6ec'); P(0,80,W,26,'#ecca92'); P(0,106,W,20,'#f0b76a');
+  P(266,24,12,12,'#fff3c4'); P(268,22,8,16,'#fff3c4'); P(264,26,16,8,'#fff3c4');
+  g.globalAlpha=.3;
+  const smx = 60 - (dist*.05)%460;
+  for(let i=0;i<6;i++){
+    const drift = Math.sin(t*.02 + i)*3 + i*3;
+    P(smx+drift, 106-i*10, 7+i*2, 9, i<2 ? '#8f959d' : '#b8bcc2');
+  }
+  g.globalAlpha=1;
+  for(const h of hills){
+    const sx = ((h.x - dist*.22) % (W+120) + (W+120)) % (W+120) - 60;
+    P(sx, 126-h.h, h.w, h.h, '#5c7a52');
+    P(sx+h.w*.15, 126-h.h-3, h.w*.7, 3, '#5c7a52');
+    P(sx+h.w*.32, 126-h.h-5, h.w*.36, 2, '#688a5c');
+    P(sx+6, 123-h.h, h.w-12, 3, '#688a5c');
+  }
+  P(0,124,W,6,'#7f9450');
+  for(const tr of trees){
+    const sx = ((tr.x - dist*.5) % (W+80) + (W+80)) % (W+80) - 40;
+    const top = 126-tr.h;
+    P(sx+3, top, 2, tr.h, '#d8cfbc');
+    P(sx+1, top+3, 3, 1, '#c9bfae');
+    P(sx+5, top+2, 3, 1, '#c9bfae');
+    P(sx-3, top-6, 14, 6, '#8aa06a');
+    P(sx-1, top-9, 10, 4, '#9cb47a');
+    P(sx+6, top-3, 7, 4, '#7a9060');
+    P(sx-6, top-3, 6, 4, '#849a66');
+    P(sx+1, top-11, 6, 2, '#9cb47a');
+  }
+  P(0,130,W,H-130,'#c98d4f');
+  P(0,130,W,2,'#b57c40');
+  for(let k=0;k<26;k++){
+    const sx = ((k*67 - dist) % (W+20) + (W+20)) % (W+20) - 10;
+    P(sx, 136 + (k*37)%38, 3, 1, '#a8713a');
+  }
+  for(let k=0;k<10;k++){
+    const sx = ((k*137+40 - dist) % (W+20) + (W+20)) % (W+20) - 10;
+    P(sx, 158+(k*17)%16, 4, 2, '#b57c40');
+  }
+}
+
+/* ---------- special punch burst + shockwave ---------- */
+function drawBurst(tx, ty){
+  const fx = tx+48, fy = ty+4;
+  const l = 22 + ((t>>1)%3)*5;
+  P(fx, fy,   l,    12, '#e04a1e');
+  P(fx, fy+1, l-4,  10, '#f78a1e');
+  P(fx, fy+3, l-10, 6,  '#ffd23e');
+  P(fx, fy+4, l-15, 4,  '#fff8d8');
+  // shockwave crescent travelling out to attack range
+  const prog = (spElapsed()-CFG.SPECIAL_ACTIVE_START) / (CFG.SPECIAL_ACTIVE_END-CFG.SPECIAL_ACTIVE_START);
+  const swX = fx + prog*CFG.SPECIAL_ATTACK_RANGE;
+  g.globalAlpha = .8*(1-prog)+.2;
+  P(swX,   GY-26, 3, 22, '#fff8d8');
+  P(swX+3, GY-22, 2, 14, '#ffd23e');
+  P(swX-3, GY-30, 2, 6,  '#ffd23e');
+  g.globalAlpha = 1;
+  if((t&1)===0) spawn(fx+l-4, fy+5, 2+Math.random(), (Math.random()-.5)*2, 12, Math.random()<.5?'#f78a1e':'#ffd23e', 2);
+}
+
+/* ---------- HUD bits ---------- */
+function drawHelmet(x,y,alive){
+  const c = alive?'#ffd23e':'#3a3a42', c2 = alive?'#e8a51e':'#2c2c34';
+  P(x+1, y, 6, 2, c2);
+  P(x+2, y-1, 4, 1, c2);
+  P(x, y+2, 8, 2, c);
+  P(x+3, y, 2, 2, alive?'#c8402e':'#26262e');
+}
+
+/* ---------- game flow ---------- */
+function reset(){
+  stumps=[]; medals=[]; parts=[]; dist=0; speed=CFG.BASE_SPEED;
+  score=0; stumpsCleared=0; smashed=0; lives=CFG.LIVES;
+  truck.y=GY; truck.vy=0; truck.ground=true;
+  power=0; special=0; hitstop=0; invuln=0; redFlash=0; jumpBuf=0; coyote=0;
+  nextSpawn=W+160; nextMedal=260; dead=0; newBest=false;
+  announce('Game started');
+}
+function startJump(){ truck.vy=CFG.JUMP_VELOCITY; truck.ground=false; coyote=0; jumpBuf=0; sfx('jump'); }
+function jump(){
+  if(state==='title'){ state='play'; reset(); return; }
+  if(state==='over'){ if(dead>35){ state='play'; reset(); } return; }
+  if(state==='paused'){ resume(); return; }
+  if(truck.ground || coyote>0) startJump();
+  else jumpBuf = CFG.JUMP_BUFFER_TICKS;
+}
+function endJump(){ if(!truck.ground && truck.vy<CFG.JUMP_CUT) truck.vy=CFG.JUMP_CUT; }
+function doSpecial(){
+  if(state!=='play' || special>0 || power<CFG.SPECIAL_CHARGE_REQUIRED) return;
+  special=CFG.SPECIAL_DURATION; power=0; shake=RM?3:8; sfx('punch');
+}
+function addCharge(n){
+  const was = power;
+  power = Math.min(CFG.SPECIAL_CHARGE_REQUIRED, power+n);
+  if(power>=CFG.SPECIAL_CHARGE_REQUIRED && was<CFG.SPECIAL_CHARGE_REQUIRED){ sfx('ready'); announce('Special move ready'); }
+  else sfx('medal');
+}
+function knockInRange(){
+  const fx = truck.x+48;
+  for(const s of stumps){
+    if(s.fly || s.burn>0) continue;
+    if(s.x < fx + CFG.SPECIAL_ATTACK_RANGE && s.x+SW(s) > fx-6){
+      s.fly=true; s.vx=2.5+Math.random()*2; s.vyo=3+Math.random()*1.5; s.yo=0;
+      smashed++; score += CFG.SPECIAL_DESTROY_BONUS; sfx('pop');
+      for(let i=0;i<10;i++) spawn(s.x+SW(s)/2, GY-10, (Math.random()-.3)*3, -Math.random()*2.5, 22, ['#f78a1e','#ffd23e','#6b452c','#e2b26e'][i%4], 2);
+    }
+  }
+}
+function hit(hitStump){
+  lives--; power=0;
+  hitstop = CFG.HITSTOP_TICKS; invuln = CFG.INVULN_TICKS;
+  redFlash = RM?0:10; shake = RM?4:12; sfx('crash');
+  // knock the offending stump away so it can't hit twice
+  hitStump.fly=true; hitStump.vx=3; hitStump.vyo=3.5; hitStump.yo=0;
+  for(let i=0;i<16;i++) spawn(truck.x+40+Math.random()*10, GY-14+Math.random()*10, (Math.random()-.4)*2.5, -Math.random()*2, 26, ['#9aa0a8','#f78a1e','#6b452c'][i%3], 2);
+  if(lives<=0){
+    state='over'; dead=0;
+    if(Math.floor(score)>hs){ hs=Math.floor(score); newBest=true; ls.set('cm_hs', hs); }
+    announce('Game over. Score ' + Math.floor(score));
+  } else {
+    announce(lives + (lives===1?' life':' lives') + ' remaining');
+  }
+}
+function pause(){ if(state==='play'){ state='paused'; announce('Paused'); } }
+function resume(){ if(state==='paused'){ state='play'; announce('Resumed'); } }
+
+function update(){
+  t++;
+  if(shake>0) shake--;
+  if(redFlash>0) redFlash--;
+  updateParts();
+  if(state==='over'){ dead++; return; }
+  if(state!=='play') return;
+  if(hitstop>0){ hitstop--; return; }   // freeze-frame impact feedback
+
+  speed = Math.min(CFG.MAX_SPEED, CFG.BASE_SPEED + dist*CFG.SPEED_RAMP);
+  dist += speed;
+  score += speed*0.1;
+
+  // physics
+  if(!truck.ground){ truck.vy += CFG.GRAVITY; truck.y += truck.vy; }
+  else if(coyote<CFG.COYOTE_TICKS) coyote=CFG.COYOTE_TICKS;
+  if(truck.y >= GY && !truck.ground){
+    truck.y=GY; truck.vy=0; truck.ground=true; dustBurst(); sfx('land');
+    if(jumpBuf>0) startJump();            // buffered jump
+  }
+  if(jumpBuf>0) jumpBuf--;
+  if(coyote>0 && truck.ground===false) coyote--;
+  if(invuln>0) invuln--;
+  if(truck.ground && (t&1)===0) spawn(truck.x+4, GY-2, -speed*.5-Math.random()*.5, -Math.random()*.8, 14+Math.random()*8, Math.random()<.5?'#c9a878':'#b08d5e', 2);
+
+  // spawn stumps - gaps always leave landing + reaction room
+  nextSpawn -= speed;
+  if(nextSpawn<=0){
+    const big = Math.random()<.3;
+    stumps.push({x:W+24, big, burn:0});
+    let clusterW = 0;
+    if(!big && speed>3.1 && Math.random()<.2){
+      stumps.push({x:W+24+24, big:false, burn:0});   // tight pair: one jump clears both
+      clusterW = 24;
+    }
+    if(Math.random()<.5){ medals.push({x:W+24+clusterW/2, y:GY-40-Math.random()*8}); nextMedal=CFG.MEDAL_MIN+Math.random()*CFG.MEDAL_VAR; }
+    nextSpawn = CFG.SPAWN_MIN + Math.random()*CFG.SPAWN_VAR + speed*CFG.SPAWN_SPEED_PAD + clusterW;
+  }
+  nextMedal -= speed;
+  if(nextMedal<=0){ medals.push({x:W+16, y:GY-32-Math.random()*16}); nextMedal=CFG.MEDAL_MIN+Math.random()*CFG.MEDAL_VAR; }
+
+  // move world
+  for(const s of stumps){
+    if(s.fly){ s.x += s.vx; s.yo += s.vyo; s.vyo -= .28; }
+    else s.x -= speed;
+  }
+  for(const m of medals) m.x -= speed;
+
+  // airborne stump clears award score (medals are the only special charge)
+  for(const s of stumps){
+    if(!s.counted && !s.fly && s.burn===0 && s.x+SW(s) < truck.x+6){
+      s.counted=true; stumpsCleared++; score += CFG.CLEAR_BONUS;
+    }
+  }
+  stumps = stumps.filter(s=> s.x>-40 && s.x<W+60 && s.burn<26 && (!s.fly || GY-s.yo < H+30));
+
+  // special punch: strike frames destroy stumps in range
+  if(special>0){
+    special--;
+    if(spActive()) knockInRange();
+  }
+
+  // medal pickup (truck + Chris hitbox)
+  const ty = truck.y-27;
+  medals = medals.filter(m=>{
+    if(m.x < -12) return false;
+    if(m.x < truck.x+46 && m.x+10 > truck.x+2 && m.y-6 < ty+18 && m.y+8 > ty-24){
+      addCharge(1); score += CFG.MEDAL_BONUS;
+      for(let i=0;i<6;i++) spawn(m.x+4, m.y, (Math.random()-.5)*1.6, -Math.random()*1.4, 16, i%2?'#f6d868':'#fffbe0', 1);
+      return false;
+    }
+    return true;
+  });
+
+  // collision (skipped while invulnerable or during active strike frames)
+  if(invuln<=0 && !spActive()){
+    for(const s of stumps){
+      if(s.burn>0 || s.fly) continue;
+      const w = SW(s), h = SH(s);
+      if(truck.x+8 < s.x+w-2 && truck.x+44 > s.x+2 && truck.y-1 > GY-h+1){ hit(s); break; }
+    }
+  }
+}
+
+/* ---------- text ---------- */
+function txt(s, x, y, size, c, align){
+  g.font = 'bold ' + size + 'px monospace';
+  g.textAlign = align||'left';
+  g.fillStyle = '#1c1408'; g.fillText(s, x+1, y+1);
+  g.fillStyle = c; g.fillText(s, x, y);
+}
+
+function draw(){
+  g.save();
+  if(shake>0) g.translate((Math.random()*2-1)*(RM?1:2)|0, (Math.random()*2-1)*1.5|0);
+  drawBg();
+  for(const s of stumps) drawStump(s);
+  for(const m of medals) drawMedal(m);
+
+  const tx = truck.x, ty = truck.y-27;
+  const blink = invuln>0 && ((t>>2)&1)===0;
+  if(state==='over'){
+    drawTruck(tx, ty+1, false);
+    if((t>>3)%2===0) txt('!', tx+20, ty-26, 10, '#ffd23e');
+  } else if(!blink){
+    drawTruck(tx, ty, truck.ground && state==='play');
+    if(spActive()) drawBurst(tx, ty);
+    if(special>0 && spActive() && (t>>2)%2===0) txt('POW!', tx+70, ty-14, 11, '#ffd23e');
+  }
+  drawParts();
+
+  if(CFG.DEBUG_COLLISION_BOXES){
+    g.globalAlpha=.5;
+    P(truck.x+8, truck.y-28, 36, 27, '#00e0ff');
+    for(const s of stumps) if(!s.fly&&s.burn===0) P(s.x+2, GY-SH(s)+1, SW(s)-4, SH(s)-1, '#ff00aa');
+    if(spActive()) P(truck.x+48, GY-30, CFG.SPECIAL_ATTACK_RANGE, 30, '#ffee00');
+    g.globalAlpha=1;
+  }
+
+  // red edge flash after losing a life
+  if(redFlash>0){
+    g.globalAlpha = redFlash/20;
+    P(0,0,W,4,'#e04a1e'); P(0,H-4,W,4,'#e04a1e'); P(0,0,4,H,'#e04a1e'); P(W-4,0,4,H,'#e04a1e');
+    g.globalAlpha=1;
+  }
+
+  // ---- HUD ----
+  if(state!=='title'){
+    txt('SCORE ' + String(Math.floor(score)).padStart(6,'0'), 6, 12, 9, '#fff');
+    txt('BEST ' + hs, W-40, 12, 9, '#ffe9a8', 'right');
+    // special meter
+    const ready = power>=CFG.SPECIAL_CHARGE_REQUIRED;
+    for(let i=0;i<CFG.SPECIAL_CHARGE_REQUIRED;i++){
+      P(6+i*10, 17, 9, 7, '#20242e');
+      if(i<power) P(7+i*10, 18, 7, 5, ready && (t>>3)%2===0 ? '#fff0a8' : '#e8b93e');
+    }
+    txt(ready ? 'SPECIAL READY' : 'SPECIAL', 58, 24, 7, ready?'#ffd23e':'#c9b98a');
+    // lives
+    for(let i=0;i<CFG.LIVES;i++) drawHelmet(6+i*11, 29, i<lives);
+    // mute + pause icons (tap targets)
+    P(W-36, 4, 14, 11, '#20242e');
+    P(W-33, 7, 3, 5, '#c9b98a'); P(W-30, 5, 2, 9, '#c9b98a');
+    if(mute){ P(W-27, 6, 4, 1, '#e04a1e'); P(W-27, 9, 4, 1, '#e04a1e'); P(W-25, 7, 1, 3, '#e04a1e'); }
+    else { P(W-27, 7, 1, 5, '#c9b98a'); P(W-25, 6, 1, 7, '#c9b98a'); }
+    P(W-18, 4, 14, 11, '#20242e');
+    P(W-15, 6, 3, 7, '#c9b98a'); P(W-10, 6, 3, 7, '#c9b98a');
+  }
+  if(state==='title'){
+    g.globalAlpha=.55; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
+    txt('CHRISMANIA', W/2, 46, 26, '#ffd23e', 'center');
+    txt('N S W  R F S  S T U M P  R U N', W/2, 62, 8, '#f2ead8', 'center');
+    txt('EUNGAI BRIGADE', W/2, 74, 8, '#f08c8c', 'center');
+    txt('JUMP THE STUMPS, GRAB RFS MEDALS,', W/2, 102, 8, '#fff', 'center');
+    txt('CHARGE THE POWER, SMASH THROUGH DANGER.', W/2, 112, 8, '#fff', 'center');
+    txt('SPACE / TAP - JUMP    CTRL / X - SPECIAL', W/2, 130, 7, '#f6d868', 'center');
+    txt('ESC - PAUSE    M - MUTE', W/2, 140, 7, '#c9b98a', 'center');
+    if(hs>0) txt('BEST ' + hs, W/2, 152, 8, '#ffe9a8', 'center');
+    if((t>>4)%2===0) txt('PRESS SPACE / TAP TO START', W/2, 168, 9, '#ffd23e', 'center');
+  }
+  if(state==='paused'){
+    g.globalAlpha=.55; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
+    txt('PAUSED', W/2, 84, 18, '#f2ead8', 'center');
+    txt('ESC / TAP TO RESUME', W/2, 102, 9, '#ffd23e', 'center');
+  }
+  if(state==='over'){
+    g.globalAlpha=.55; P(0,36,W,88,'#10131c'); g.globalAlpha=1;
+    txt('STUMPED!', W/2, 62, 22, '#e04a1e', 'center');
+    txt('SCORE ' + Math.floor(score), W/2, 80, 11, '#fff', 'center');
+    txt('STUMPS CLEARED ' + stumpsCleared + '   SMASHED ' + smashed, W/2, 94, 8, '#f6d868', 'center');
+    txt('BEST ' + hs, W/2, 106, 9, '#ffe9a8', 'center');
+    if(newBest && (t>>3)%2===0) txt('NEW BRIGADE RECORD!', W/2, 118, 8, '#ffd23e', 'center');
+    if(dead>35 && (t>>4)%2===0) txt('SPACE / TAP TO GO AGAIN', W/2, 118+(newBest?12:0), 8, '#f2ead8', 'center');
+  }
+  // touch special button (lower-left) - jump is anywhere else on screen
+  if(state==='play'){
+    const ready = power>=CFG.SPECIAL_CHARGE_REQUIRED && special<=0;
+    g.globalAlpha = ready ? .95 : .5;
+    P(6, H-30, 30, 24, '#20242e');
+    P(7, H-29, 28, 22, ready ? (((t>>3)%2===0)?'#b8641e':'#8a4a16') : '#3a3226');
+    P(13, H-22, 12, 8, ready?'#e0a878':'#8a7a66');
+    P(24, H-24, 5, 6, ready?'#d89a68':'#7a6a58');
+    g.globalAlpha=1;
+  }
+  g.restore();
+}
+
+/* ---------- fixed-timestep loop (60Hz updates on any refresh rate) ---------- */
+let last=performance.now(), acc=0;
+function loop(now){
+  const dt = Math.min(100, now-last); last=now; acc+=dt;   // clamp tab-return spikes
+  while(acc>=16.667){ update(); acc-=16.667; }
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ---------- input ---------- */
+addEventListener('keydown', e=>{
+  if(e.repeat) return;
+  if(e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW'){ e.preventDefault(); jump(); }
+  else if(e.code==='Enter'){ if(state==='title'||state==='over') jump(); }
+  else if(e.code==='ControlLeft' || e.code==='ControlRight' || e.code==='KeyX'){ doSpecial(); }
+  else if(e.code==='Escape'){ state==='paused' ? resume() : pause(); }
+  else if(e.code==='KeyM'){ toggleMute(); }
+});
+addEventListener('keyup', e=>{
+  if(e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW') endJump();
+});
+cv.addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX-r.left)/r.width*W, y = (e.clientY-r.top)/r.height*H;
+  if(state==='play'){
+    if(x>W-38 && x<W-20 && y<17){ toggleMute(); return; }
+    if(x>W-20 && y<17){ pause(); return; }
+    if(x<40 && y>H-34){ doSpecial(); return; }
+    jump(); return;
+  }
+  jump();
+});
+cv.addEventListener('pointerup', endJump);
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) pause(); });
+</script>
+</body>
+</html>
