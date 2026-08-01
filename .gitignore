@@ -1,0 +1,6 @@
+# Local Claude Code settings and session data - machine-specific, not project config
+.claude/
+
+# OS junk
+Thumbs.db
+.DS_Store
