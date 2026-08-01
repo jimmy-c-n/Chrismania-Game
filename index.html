@@ -80,6 +80,19 @@ const CFG = Object.assign({
   CAMEO_COOLDOWN: 600,       // px of driving after Steve/Brett leaves before the next cameo
   MUSIC: true,               // background chiptune
   MUSIC_VOLUME: 0.7,         // 0..1
+  // per-sound source; overridden wholesale by settings.js
+  AUDIO: {
+    music: { use:'synth', src:'assets/audio/music/stump-run-loop.wav' },
+    jump:  { use:'synth', src:'assets/audio/sfx/jump.wav'  },
+    land:  { use:'synth', src:'assets/audio/sfx/land.wav'  },
+    medal: { use:'synth', src:'assets/audio/sfx/medal.wav' },
+    ready: { use:'synth', src:'assets/audio/sfx/ready.wav' },
+    punch: { use:'synth', src:'assets/audio/sfx/punch.wav' },
+    smash: { use:'synth', src:'assets/audio/sfx/smash.wav' },
+    pop:   { use:'synth', src:'assets/audio/sfx/pop.wav'   },
+    crash: { use:'synth', src:'assets/audio/sfx/crash.wav' },
+    nag:   { use:'synth', src:'assets/audio/sfx/nag.wav'   }
+  },
   MUSIC_SPEEDUP: true,       // song speeds up with the run
   MUSIC_SPEEDUP_RATIO: 0.5,  // how much faster at max speed (0.5 = 50% faster)
   SHOW_COW: true,            // the cow does the deed before Steve trips
@@ -132,12 +145,57 @@ let brett=null, nextBrett=2600, cameoCooldown=0;
 
 function announce(s){ statusEl.textContent = s; }
 
-/* ---------- tiny sfx ---------- */
+/* ---------- audio: sourced files with a synth fallback ----------
+   Each sound in CFG.AUDIO can be {use:'file', src:'...'} or {use:'synth'}.
+   A file that is missing, blocked or undecodable silently falls back to
+   the generated version, so the game never ends up silent. */
 let AC=null;
+const AUD = {};                                   // key -> {state, buf}
+const audCfg  = k => (CFG.AUDIO && CFG.AUDIO[k]) || null;
+const wantFile = k => { const c=audCfg(k); return !!(c && c.use==='file' && c.src); };
+let audPreloaded=false;
+function ensureAC(){
+  try{ AC = AC || new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+  if(AC && AC.state==='suspended') AC.resume().catch(()=>{});
+  if(AC && !audPreloaded){ audPreloaded=true; preloadAudio(); }
+  return AC;
+}
+function loadAudio(k){
+  const c = audCfg(k); if(!c || !c.src || !AC) return;
+  const e = AUD[k] = AUD[k] || {state:'idle'};
+  if(e.state!=='idle') return;
+  e.state='loading';
+  fetch(c.src)
+    .then(r=>{ if(!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+    .then(b=>AC.decodeAudioData(b))
+    .then(buf=>{ e.buf=buf; e.state='ready'; if(k==='music' && state==='play'){ stopMusic(); startMusic(); } })
+    .catch(()=>{ e.state='failed'; if(k==='music' && state==='play') startMusic(); });
+}
+function preloadAudio(){
+  if(!AC) return;
+  Object.keys(CFG.AUDIO||{}).forEach(k=>{ if(wantFile(k)) loadAudio(k); });
+}
+function playBuf(k, vol, loop, rate){
+  const e = AUD[k];
+  if(!e || e.state!=='ready') return null;
+  const s=AC.createBufferSource(), v=AC.createGain();
+  s.buffer=e.buf; s.loop=!!loop;
+  if(rate) s.playbackRate.value=rate;
+  s.connect(v); v.connect(AC.destination);
+  v.gain.value = vol * ((audCfg(k)&&audCfg(k).vol!=null) ? audCfg(k).vol : 1);
+  s.start();
+  return {src:s, gain:v};
+}
+
 function sfx(k){
   if(mute) return;
+  if(!ensureAC()) return;
+  if(wantFile(k)){
+    if(!AUD[k] || AUD[k].state==='idle') loadAudio(k);
+    if(AUD[k] && AUD[k].state==='ready'){ playBuf(k, 1); return; }
+    if(AUD[k] && AUD[k].state==='loading') return;   // don't double up while it arrives
+  }
   try{
-    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
     const o=AC.createOscillator(), v=AC.createGain(); o.connect(v); v.connect(AC.destination);
     const n=AC.currentTime;
     if(k==='jump'){ o.type='square'; o.frequency.setValueAtTime(230,n); o.frequency.exponentialRampToValueAtTime(540,n+.12); v.gain.setValueAtTime(.07,n); v.gain.exponentialRampToValueAtTime(.001,n+.18); o.start(n); o.stop(n+.2); }
@@ -202,7 +260,7 @@ async function toggleRotate(){
 /* ---------- background music: urgent callout chiptune (no sirens) ---------- */
 const MEL  = [0,null,12,null, 7,3,7,null, 0,null,12,null, 8,7,3,null, 8,null,15,null, 12,8,12,null, 10,null,14,null, 12,10,7,5];
 const BARS = [0,0,8,10];
-let musicId=null, musicStep=0, musicNext=0;
+let musicId=null, musicStep=0, musicNext=0, musicSrc=null;
 function mnote(f, when, dur, type, vol){
   const o=AC.createOscillator(), v=AC.createGain();
   o.type=type; o.frequency.value=f; o.connect(v); v.connect(AC.destination);
@@ -225,15 +283,27 @@ function musicLoop(){
   }
   musicId = setTimeout(musicLoop, 60);
 }
-function startMusic(){
-  if(mute || !CFG.MUSIC || musicId) return;
-  try{
-    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
-    musicNext = Math.max(musicNext, AC.currentTime + .05);
-    musicLoop();
-  }catch(e){}
+function musicRate(){
+  if(!CFG.MUSIC_SPEEDUP) return 1;
+  const prog = Math.max(0, Math.min(1, (speed-CFG.BASE_SPEED)/(CFG.MAX_SPEED-CFG.BASE_SPEED)));
+  return 1 + prog*CFG.MUSIC_SPEEDUP_RATIO;
 }
-function stopMusic(){ if(musicId){ clearTimeout(musicId); musicId=null; } }
+function startMusic(){
+  if(mute || !CFG.MUSIC || musicId || musicSrc) return;
+  if(!ensureAC()) return;
+  if(wantFile('music')){
+    if(!AUD.music || AUD.music.state==='idle') loadAudio('music');
+    const st = AUD.music && AUD.music.state;
+    if(st==='ready'){ musicSrc = playBuf('music', .5*CFG.MUSIC_VOLUME, true, musicRate()); return; }
+    if(st==='loading') return;          // startMusic runs again once it lands
+  }
+  musicNext = Math.max(musicNext, AC.currentTime + .05);
+  musicLoop();
+}
+function stopMusic(){
+  if(musicId){ clearTimeout(musicId); musicId=null; }
+  if(musicSrc){ try{ musicSrc.src.stop(); }catch(e){} musicSrc=null; }
+}
 
 /* ---------- special-move phase helpers ---------- */
 const spElapsed = ()=> CFG.SPECIAL_DURATION - special;
@@ -759,6 +829,8 @@ function update(){
   speed = Math.min(CFG.MAX_SPEED, CFG.BASE_SPEED + dist*CFG.SPEED_RAMP);
   dist += speed;
   score += speed*0.1;
+  // sourced music speeds up by playback rate (the synth loop retimes itself)
+  if(musicSrc && (t&15)===0) musicSrc.src.playbackRate.value = musicRate();
 
   // physics
   if(!truck.ground){ truck.vy += CFG.GRAVITY; truck.y += truck.vy; }

@@ -140,6 +140,42 @@ window.GAME_SETTINGS = {
   MUSIC_SPEEDUP: true,
   MUSIC_SPEEDUP_RATIO: 0.5,
 
+  /* ---------- AUDIO SOURCES ----------
+     Every sound is generated in code by default. To use your own
+     recording instead, flip that sound to 'file' and point src at it.
+
+       use: 'synth'  generated in code (src is ignored)
+       use: 'file'   loads src instead
+       src:          path relative to index.html
+       vol:          0..1 trim, applies to the file only (default 1)
+
+     A file that is missing, blocked or won't decode silently falls
+     back to the synth version, so the game is never left silent.
+
+     Any format the browser can decode works - wav, mp3, ogg, m4a.
+     Prefer mp3 or ogg: the wavs in assets/audio are roughly ten
+     times the size, which matters on phone data.
+
+     NOTE: loading files needs a web server. On GitHub Pages it just
+     works. If you open index.html by double-clicking it, the browser
+     blocks file:// fetches and you'll hear the synth instead - run
+     "python -m http.server 8000" to test sourced audio locally.
+
+     Music note: with a file, MUSIC_SPEEDUP works by nudging playback
+     rate, so the track rises slightly in pitch as it speeds up. */
+  AUDIO: {
+    music: { use:'synth', src:'assets/audio/music/stump-run-loop.wav', vol:1 },
+    jump:  { use:'synth', src:'assets/audio/sfx/jump.wav',  vol:1 },  // truck leaves the ground
+    land:  { use:'synth', src:'assets/audio/sfx/land.wav',  vol:1 },  // touches back down
+    medal: { use:'synth', src:'assets/audio/sfx/medal.wav', vol:1 },  // RFS medal collected
+    ready: { use:'synth', src:'assets/audio/sfx/ready.wav', vol:1 },  // special meter fills
+    punch: { use:'synth', src:'assets/audio/sfx/punch.wav', vol:1 },  // special move fires
+    smash: { use:'synth', src:'assets/audio/sfx/smash.wav', vol:1 },  // a stump is destroyed
+    pop:   { use:'synth', src:'assets/audio/sfx/pop.wav',   vol:1 },  // cowpat, Brett bumped
+    crash: { use:'synth', src:'assets/audio/sfx/crash.wav', vol:1 },  // hit a stump, lose a life
+    nag:   { use:'synth', src:'assets/audio/sfx/nag.wav',   vol:1 }   // Steve or Brett turns up
+  },
+
   /* ---------- COMEDY BITS ----------
      Turn parts of Steve's trip sequence on or off.
      SHOW_COW: the cow trots in and drops the pat first.
