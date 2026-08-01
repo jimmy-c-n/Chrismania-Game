@@ -967,7 +967,10 @@ function draw(){
   } else if(!blink){
     drawTruck(tx, ty, truck.ground && state==='play');
     if(spActive()) drawBurst(tx, ty);
-    if(special>0 && spActive() && (t>>2)%2===0) txt('STUMP SMASH!', tx+72, ty-14, 10, '#ffd23e');
+    if(special>0 && spActive() && (t>>2)%2===0){
+      txt('STUMP',  tx+72, ty-17, 10, '#ffd23e');
+      txt('SMASH!', tx+72, ty-6,  10, '#ffd23e');
+    }
   }
   if(captain) drawCaptain(captain);
   drawParts();
