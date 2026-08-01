@@ -3,10 +3,16 @@
 <head>
 <meta charset="utf-8">
 <title>Chrismania: RFS Stump Run</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <style>
-  html,body{margin:0;height:100%;background:#14161c;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none;font-family:monospace}
-  #wrap{position:relative;width:min(100vw,177.7vh);aspect-ratio:16/9;max-height:100vh}
+  /* dvh keeps the game clear of mobile browser chrome; the safe-area
+     padding keeps it out from under notches and home indicators */
+  html,body{margin:0;height:100vh;height:100dvh;background:#14161c;overflow:hidden;
+    overscroll-behavior:none;touch-action:none;font-family:monospace;
+    -webkit-user-select:none;user-select:none}
+  body{display:flex;align-items:center;justify-content:center;box-sizing:border-box;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  #wrap{position:relative;width:min(100%,177.7vh);width:min(100%,177.7dvh);aspect-ratio:16/9;max-height:100%}
   canvas{position:absolute;inset:0;width:100%;height:100%}
   /* fullscreen: fill the screen but letterbox to keep 16:9 pixels square */
   #wrap:fullscreen{width:100vw;height:100vh;max-height:none;aspect-ratio:auto;background:#14161c}
@@ -174,6 +180,23 @@ function toggleFullscreen(){
       if(exit) exit.call(document);
     }
   }catch(e){}
+}
+
+/* ---------- rotate: lock to landscape (phones only) ---------- */
+const canRotate = !!(screen.orientation && screen.orientation.lock) && matchMedia('(pointer: coarse)').matches;
+let rotLocked = false;
+async function toggleRotate(){
+  if(!canRotate) return;
+  try{
+    if(rotLocked){ screen.orientation.unlock(); rotLocked=false; return; }
+    // Android needs fullscreen before an orientation lock will be granted
+    if(!isFs()){
+      const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+      if(req) await req.call(wrap);
+    }
+    await screen.orientation.lock('landscape');
+    rotLocked = true;
+  }catch(e){ rotLocked = false; }   // iOS and some browsers refuse; harmless
 }
 
 /* ---------- background music: urgent callout chiptune (no sirens) ---------- */
@@ -586,7 +609,8 @@ function drawBg(){
   P(0,0,W,52,'#7fc4e8'); P(0,52,W,28,'#a5d6ec'); P(0,80,W,26,'#ecca92'); P(0,106,W,20,'#f0b76a');
   P(266,24,12,12,'#fff3c4'); P(268,22,8,16,'#fff3c4'); P(264,26,16,8,'#fff3c4');
   g.globalAlpha=.3;
-  const smx = 60 - (dist*.05)%460;
+  // wraps back onto screen instead of drifting away for good
+  const smx = ((70 - dist*.045) % 380 + 380) % 380 - 30;
   for(let i=0;i<6;i++){
     const drift = Math.sin(t*.02 + i)*3 + i*3;
     P(smx+drift, 106-i*10, 7+i*2, 9, i<2 ? '#8f959d' : '#b8bcc2');
@@ -896,6 +920,13 @@ function txt(s, x, y, size, c, align, plain){
 /* fullscreen / mute / pause icons, top-right (also the touch targets) */
 function drawIcons(){
   const lit='#f2ead8', dim='#c9b98a';
+  if(canRotate){
+    P(W-72, 4, 14, 11, '#20242e');
+    const rx=W-70, ry=6, c=rotLocked?lit:dim;
+    P(rx+1, ry+3, 4, 6, c);  P(rx+2, ry+4, 2, 4, '#20242e');   // portrait phone
+    P(rx+6, ry+5, 6, 4, c);  P(rx+7, ry+6, 4, 2, '#20242e');   // landscape phone
+    P(rx+2, ry, 6, 1, c); P(rx+8, ry+1, 1, 1, c); P(rx+7, ry, 1, 2, c);  // turn arrow
+  }
   if(fsOK){
     P(W-54, 4, 14, 11, '#20242e');
     const bx=W-51, by=6, c=isFs()?lit:dim;      // corner brackets
@@ -961,7 +992,7 @@ function draw(){
   // ---- HUD ----
   if(state!=='title'){
     txt('SCORE ' + String(Math.floor(score)).padStart(6,'0'), 6, 12, 9, '#fff');
-    txt('BEST ' + hs, W-58, 12, 9, '#ffe9a8', 'right');
+    txt('BEST ' + hs, W-(canRotate?76:58), 12, 9, '#ffe9a8', 'right');
     // special meter
     const ready = power>=CFG.SPECIAL_CHARGE_REQUIRED;
     for(let i=0;i<CFG.SPECIAL_CHARGE_REQUIRED;i++){
@@ -990,7 +1021,7 @@ function draw(){
     txt('ESC / TAP TO RESUME', W/2, 102, 9, '#ffd23e', 'center');
   }
   if(state==='over'){
-    g.globalAlpha=.55; P(0,36,W,88,'#10131c'); g.globalAlpha=1;
+    g.globalAlpha=.62; P(0,34,W,108,'#10131c'); g.globalAlpha=1;
     txt('STUMPED!', W/2, 62, 22, '#e04a1e', 'center');
     txt('SCORE ' + Math.floor(score), W/2, 80, 11, '#fff', 'center');
     txt('STUMPS CLEARED ' + stumpsCleared + '   SMASHED ' + smashed, W/2, 94, 8, '#f6d868', 'center');
@@ -1041,12 +1072,12 @@ cv.addEventListener('pointerdown', e=>{
   e.preventDefault();
   const r = cv.getBoundingClientRect();
   const x = (e.clientX-r.left)/r.width*W, y = (e.clientY-r.top)/r.height*H;
-  // icon row works in every state
-  if(y<18 && x>W-56){
-    if(x<W-38) toggleFullscreen();
-    else if(x<W-20) toggleMute();
-    else if(state==='paused') resume(); else pause();
-    return;
+  // icon row works in every state; unavailable icons fall through to a jump
+  if(y<18){
+    if(canRotate && x>W-74 && x<W-56){ toggleRotate(); return; }
+    if(fsOK && x>W-56 && x<W-38){ toggleFullscreen(); return; }
+    if(x>W-38 && x<W-20){ toggleMute(); return; }
+    if(x>W-20){ if(state==='paused') resume(); else pause(); return; }
   }
   if(state==='play' && x<64 && y>H-36){ doSpecial(); return; }
   jump();
