@@ -179,7 +179,7 @@ function drawTruck(tx, ty, anim){
   P(cx+4, hy-18, 1, 5, '#d89a68');
   P(cx+0, hy-17, 1, 1, '#20242c');
   P(cx+3, hy-17, 1, 1, '#20242c');
-  P(cx+0, hy-15, 4, 1, '#4a3322');
+  P(cx+0, hy-15, 4, 1, '#c08d60');   // 5 o'clock shadow on the lip
   P(cx+0, hy-14, 3, 1, '#8a3324');
   P(cx+1, hy-14, 2, 1, '#f2ead8');
   // cap
@@ -559,14 +559,27 @@ function draw(){
     if(newBest && (t>>3)%2===0) txt('NEW BRIGADE RECORD!', W/2, 118, 8, '#ffd23e', 'center');
     if(dead>35 && (t>>4)%2===0) txt('SPACE / TAP TO GO AGAIN', W/2, 118+(newBest?12:0), 8, '#f2ead8', 'center');
   }
-  // touch special button (lower-left) - jump is anywhere else on screen
+  // touch special button (lower-left): starburst punch badge - jump is anywhere else
   if(state==='play'){
     const ready = power>=CFG.SPECIAL_CHARGE_REQUIRED && special<=0;
+    const bx=6, by=H-36, pulse = ready && (t>>3)%2===0;
     g.globalAlpha = ready ? .95 : .5;
-    P(6, H-30, 30, 24, '#20242e');
-    P(7, H-29, 28, 22, ready ? (((t>>3)%2===0)?'#b8641e':'#8a4a16') : '#3a3226');
-    P(13, H-22, 12, 8, ready?'#e0a878':'#8a7a66');
-    P(24, H-24, 5, 6, ready?'#d89a68':'#7a6a58');
+    P(bx-2, by-2, 38, 32, '#20242e');
+    P(bx-1, by-1, 36, 30, ready ? (pulse?'#96381c':'#7a2c16') : '#2e2a24');
+    const cxb=bx+17, cyb=by+14;
+    // comic starburst spikes
+    const spike = ready ? (pulse?'#ffe98a':'#ffd23e') : '#6a6252';
+    P(cxb-2, cyb-12, 4, 24, spike);
+    P(cxb-12, cyb-2, 24, 4, spike);
+    P(cxb-8, cyb-8, 4, 4, spike); P(cxb+4, cyb-8, 4, 4, spike);
+    P(cxb-8, cyb+4, 4, 4, spike); P(cxb+4, cyb+4, 4, 4, spike);
+    // fiery core with fist
+    P(cxb-6, cyb-6, 12, 12, ready?'#f78a1e':'#4a4238');
+    P(cxb-4, cyb-4, 8, 8, ready?'#ffd23e':'#57503f');
+    P(cxb-4, cyb-2, 9, 6, ready?'#e0a878':'#8a7a66');
+    P(cxb+3, cyb-3, 3, 7, ready?'#d89a68':'#7a6a58');
+    for(let i=0;i<3;i++) P(cxb-3+i*3, cyb-2, 1, 1, ready?'#c98a5e':'#6a5c4c');
+    if(ready) txt('READY!', cxb, by-6, 7, pulse?'#ffe98a':'#ffd23e', 'center');
     g.globalAlpha=1;
   }
   g.restore();
@@ -601,7 +614,7 @@ cv.addEventListener('pointerdown', e=>{
   if(state==='play'){
     if(x>W-38 && x<W-20 && y<17){ toggleMute(); return; }
     if(x>W-20 && y<17){ pause(); return; }
-    if(x<40 && y>H-34){ doSpecial(); return; }
+    if(x<46 && y>H-42){ doSpecial(); return; }
     jump(); return;
   }
   jump();
