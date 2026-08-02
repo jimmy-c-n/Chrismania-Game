@@ -175,7 +175,7 @@ window.GAME_SETTINGS = {
      Music note: with a file, MUSIC_SPEEDUP works by nudging playback
      rate, so the track rises slightly in pitch as it speeds up. */
   AUDIO: {
-    music: { use:'file', src:'assets/audio/music/stump-run-loop.wav', vol:0.5 },
+    music: { use:'file', src:'assets/audio/music/stump-run-loop.wav', vol:0.8 },
     jump:  { use:'synth', src:'assets/audio/sfx/jump.wav',  vol:1 },  // truck leaves the ground
     land:  { use:'synth', src:'assets/audio/sfx/land.wav',  vol:1 },  // touches back down
     medal: { use:'synth', src:'assets/audio/sfx/medal.mp3', vol:1 },  // RFS medal collected
