@@ -23,7 +23,7 @@
   #ui{pointer-events:none}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
   #rotate{display:none;position:fixed;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#20242ecc;color:#f2ead8;padding:6px 12px;border-radius:4px;font-size:12px;pointer-events:none}
-  @media (orientation:portrait) and (max-width:600px){ #rotate{display:block} }
+  /* the in-canvas prompt handles this now */
 </style>
 </head>
 <body>
@@ -65,7 +65,8 @@ const CFG = Object.assign({
   MEDAL_BONUS: 25,
   FIRE_MIN_SPEED: 3.4,       // stumps can catch fire above this speed
   FIRE_CHANCE: 0.45,         // max odds of a flaming stump (scales up with speed)
-  FIRE_EXTRA_HEIGHT: 6,      // extra hitbox height from the flames
+  FIRE_EXTRA_HEIGHT: 13,     // extra hitbox height from the flames
+  SPAWN_RHYTHM: true,        // mix short/medium/long gaps instead of one flat range
   CAPTAIN_MIN_GAP: 2200,     // px between captain visits
   CAPTAIN_GAP_VAR: 2600,
   BRETT_MIN_GAP: 3800,       // px between Brett appearances (much rarer than Steve)
@@ -114,6 +115,42 @@ const ls = {
   get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
   set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 };
+
+/* ---------- difficulty ----------
+   Scales a pristine copy of the tuned values, so everything downstream
+   keeps reading CFG exactly as before. */
+const CFG0 = JSON.parse(JSON.stringify(CFG));
+const DIFFS = [
+  { id:'easy',   name:'SUNDAY DRIVE', blurb:'CRUISY, AND AN EXTRA LIFE',
+    speed:0.80, ramp:0.65, gap:1.30, lives:+1, fire:0.50, medals:0.75 },
+  { id:'normal', name:'VOLLIE',       blurb:'THE PROPER RUN',
+    speed:1.00, ramp:1.00, gap:1.00, lives: 0, fire:1.00, medals:1.00 },
+  { id:'hard',   name:'STUMP MASTER', blurb:'GOOD LUCK, CHRIS',
+    speed:1.18, ramp:1.45, gap:0.82, lives:-1, fire:1.45, medals:1.35 }
+];
+let diffIx = Math.max(0, DIFFS.findIndex(d=>d.id===(ls.get('cm_diff')||'normal')));
+const DIF = ()=> DIFFS[diffIx];
+function applyDifficulty(){
+  const d = DIF();
+  CFG.BASE_SPEED  = CFG0.BASE_SPEED * d.speed;
+  CFG.MAX_SPEED   = CFG0.MAX_SPEED  * d.speed;
+  CFG.SPEED_RAMP  = CFG0.SPEED_RAMP * d.ramp;
+  CFG.SPAWN_MIN   = CFG0.SPAWN_MIN  * d.gap;
+  CFG.SPAWN_VAR   = CFG0.SPAWN_VAR  * d.gap;
+  CFG.LIVES       = Math.max(1, CFG0.LIVES + d.lives);
+  CFG.FIRE_CHANCE = Math.min(1, CFG0.FIRE_CHANCE * d.fire);
+  CFG.MEDAL_MIN   = CFG0.MEDAL_MIN * d.medals;
+  CFG.MEDAL_VAR   = CFG0.MEDAL_VAR * d.medals;
+}
+function cycleDifficulty(step){
+  diffIx = (diffIx + step + DIFFS.length) % DIFFS.length;
+  ls.set('cm_diff', DIF().id);
+  applyDifficulty();
+  lives = CFG.LIVES; speed = CFG.BASE_SPEED;
+  sfx('medal');
+  announce('Difficulty: ' + DIF().name);
+}
+applyDifficulty();
 
 let state='loading', t=0, dist=0, speed=CFG.BASE_SPEED, score=0, stumpsCleared=0, smashed=0;
 let loadTotal=0, loadDone=0, loadShown=0;
@@ -303,8 +340,11 @@ function toggleFullscreen(){
 }
 
 /* ---------- rotate: lock to landscape (phones only) ---------- */
-const canRotate = !!(screen.orientation && screen.orientation.lock) && matchMedia('(pointer: coarse)').matches;
+const isPhone = matchMedia('(pointer: coarse)').matches;
+const canRotate = !!(screen.orientation && screen.orientation.lock) && isPhone;
 let rotLocked = false;
+// only nag on a phone actually held upright, never on desktop or tablet-wide screens
+const needsRotate = ()=> isPhone && innerHeight > innerWidth * 1.1;
 async function toggleRotate(){
   if(!canRotate) return;
   try{
@@ -539,12 +579,16 @@ function drawStump(s){
   P(x+(w>>1)-1, gy-bh-3, 2, 1, burnt?'#3a2a1c':'#8a5a30');
   // flames on a fire stump - jump higher!
   if(s.flame && !burnt){
+    // tall enough that a lazy jump clips it - the hitbox matches (FIRE_EXTRA_HEIGHT)
     const f=(t>>2)%3, fy=gy-bh-6;
-    P(x+1, fy-3, w, 4, '#e04a1e');
-    P(x+2, fy-5, w-4, 3, '#f78a1e');
-    P(x+3+f, fy-7, w-8, 3, '#ffd23e');
-    P(x+(w>>1)-2+f, fy-9, 3, 2, '#fff8d8');
-    if((t&3)===0) spawn(x+2+Math.random()*(w-4), fy-8, (Math.random()-.5)*.6, -.8-Math.random(), 14, Math.random()<.5?'#f78a1e':'#ffd23e', 1);
+    P(x+1,  fy-4,  w,    5, '#e04a1e');
+    P(x+2,  fy-8,  w-4,  5, '#e04a1e');
+    P(x+2,  fy-11, w-5,  4, '#f78a1e');
+    P(x+3+f, fy-14, w-8, 4, '#f78a1e');
+    P(x+3+f, fy-17, w-9, 4, '#ffd23e');
+    P(x+(w>>1)-2+f, fy-20, 4, 3, '#ffd23e');
+    P(x+(w>>1)-1+f, fy-22, 2, 2, '#fff8d8');
+    if((t&2)===0) spawn(x+2+Math.random()*(w-4), fy-20, (Math.random()-.5)*.6, -.9-Math.random(), 16, Math.random()<.5?'#f78a1e':'#ffd23e', 1);
   }
 }
 
@@ -568,37 +612,41 @@ function drawBrett(b){
   g.globalAlpha=.2; P(x-6,gy0-1,13,2,'#3a2712'); g.globalAlpha=1;
   if(b.fly){
     // sent flying - ho ho no
-    P(x-6,y-12,12,6,'#c8362a');
+    P(x-6,y-12,12,6,'#2c3140');
     P(x-9,y-14,4,4,'#e8b482');
+    P(x-9,y-13,4,1,'#5a5f68');            // mo still attached
     P(x+6,y-8,4,3,'#1d2026');
-    P(x-2,y-16,6,3,'#f2f2ec');
+    P(x-2,y-17,7,2,'#c8362a'); P(x+4,y-18,3,3,'#f2f2ec');
     return;
   }
   // boots
   P(x-4,y-3,4,3,'#1d2026'); P(x+1,y-3,4,3,'#1d2026');
-  // red suit legs
-  P(x-3,y-8,3,5,'#c8362a'); P(x+1,y-8,3,5,'#c8362a');
-  // coat with white hem
-  P(x-4,y-15,9,7,'#c8362a');
-  P(x-4,y-9,9,1,'#f2f2ec');
-  // belt + buckle
-  P(x-4,y-12,9,2,'#1d2026'); P(x-1,y-12,2,2,'#e8b93e');
+  // navy RFS work trousers
+  P(x-3,y-8,3,5,'#2c3140'); P(x+1,y-8,3,5,'#2c3140');
+  // navy RFS shirt with reflective stripe and epaulettes
+  P(x-4,y-15,9,7,'#2c3140');
+  P(x-4,y-15,9,1,'#3d445a');
+  P(x-4,y-11,9,1,'#e8e2d0');
+  P(x-4,y-15,2,1,'#e8b93e'); P(x+3,y-15,2,1,'#e8b93e');
+  P(x-3,y-14,2,2,'#e8e2d0');            // brigade patch
   // lecturing finger, wagging at the truck
-  if((t>>3)&1){ P(x-8,y-15,4,2,'#c8362a'); P(x-9,y-16,2,2,'#f2f2ec'); P(x-11,y-16,2,1,'#e8b482'); }
-  else        { P(x-8,y-14,4,2,'#c8362a'); P(x-9,y-14,2,2,'#f2f2ec'); P(x-11,y-13,2,1,'#e8b482'); }
+  if((t>>3)&1){ P(x-8,y-15,4,2,'#2c3140'); P(x-11,y-16,3,2,'#e8b482'); }
+  else        { P(x-8,y-14,4,2,'#2c3140'); P(x-11,y-13,3,2,'#e8b482'); }
   // other arm on hip
-  P(x+4,y-14,2,4,'#c8362a'); P(x+4,y-10,2,2,'#e8b482');
+  P(x+4,y-14,2,4,'#2c3140'); P(x+4,y-10,2,2,'#e8b482');
   // head, facing left toward the truck
-  P(x-3,y-20,7,5,'#e8b482');
-  P(x-3,y-18,1,1,'#20242c'); P(x-1,y-18,1,1,'#20242c');
-  // big white beard
-  P(x-4,y-16,9,3,'#f2f2ec');
-  P(x-3,y-13,7,1,'#f2f2ec');
-  // santa hat: fur brim, cone flopped back, pom pom
-  P(x-4,y-22,9,2,'#f2f2ec');
-  P(x-4,y-24,8,2,'#c8362a');
-  P(x+1,y-26,4,2,'#c8362a');
-  P(x+4,y-27,3,3,'#f2f2ec');
+  P(x-3,y-21,7,6,'#e8b482');
+  P(x-3,y-19,1,1,'#20242c'); P(x-1,y-19,1,1,'#20242c');
+  // dark grey bushy mo
+  P(x-4,y-17,8,2,'#4a4f57');
+  P(x-4,y-16,3,1,'#5a5f68');
+  P(x+2,y-16,2,1,'#5a5f68');
+  P(x-2,y-15,5,1,'#8a3324');            // mouth under it
+  // santa hat only: fur brim, cone flopped back, pom pom
+  P(x-4,y-23,9,2,'#f2f2ec');
+  P(x-4,y-25,8,2,'#c8362a');
+  P(x+1,y-27,4,2,'#c8362a');
+  P(x+4,y-28,3,3,'#f2f2ec');
 }
 
 /* ---------- the cow (responsible for the cowpat) ---------- */
@@ -877,8 +925,27 @@ function hit(hitStump){
     announce(lives + (lives===1?' life':' lives') + ' remaining');
   }
 }
+function restartRun(){
+  if(state!=='play' && state!=='over' && state!=='paused') return;
+  state='play'; reset(); announce('Restarted');
+}
 function pause(){ if(state==='play'){ state='paused'; stopMusic(); announce('Paused'); } }
 function resume(){ if(state==='paused'){ state='play'; startMusic(); announce('Resumed'); } }
+
+/* Gap to the next stump. A flat random range reads as "all the same", so
+   pick a short / medium / long rhythm instead, floored at the distance the
+   truck physically needs to land and jump again. */
+function nextGap(){
+  const air = 2*Math.abs(CFG.JUMP_VELOCITY)/CFG.GRAVITY;   // ticks aloft
+  const floor = 34 + air*speed*0.62;                        // truck length + landing room
+  const base = CFG.SPAWN_MIN + speed*CFG.SPAWN_SPEED_PAD;
+  if(!CFG.SPAWN_RHYTHM) return Math.max(floor, base + Math.random()*CFG.SPAWN_VAR);
+  const r = Math.random();
+  const beat = r<0.30 ? 0.40 + Math.random()*0.32   // quick one-two
+             : r<0.78 ? 0.82 + Math.random()*0.55   // the usual stride
+             :          1.60 + Math.random()*1.05;  // long breather
+  return Math.max(floor, base*0.75 + CFG.SPAWN_VAR*beat);
+}
 
 function update(){
   t++;
@@ -932,7 +999,7 @@ function update(){
       clusterW = 24;
     }
     if(Math.random()<CFG.MEDAL_ON_STUMP_CHANCE){ medals.push({x:W+24+clusterW/2, y:GY-40-Math.random()*8}); nextMedal=CFG.MEDAL_MIN+Math.random()*CFG.MEDAL_VAR; }
-    nextSpawn = CFG.SPAWN_MIN + Math.random()*CFG.SPAWN_VAR + speed*CFG.SPAWN_SPEED_PAD + clusterW;
+    nextSpawn = nextGap() + clusterW;
   }
   nextMedal -= speed;
   if(nextMedal<=0){ medals.push({x:W+16, y:GY-32-Math.random()*16}); nextMedal=CFG.MEDAL_MIN+Math.random()*CFG.MEDAL_VAR; }
@@ -1059,6 +1126,8 @@ function update(){
   }
 }
 
+const metres = ()=> Math.floor(dist/10);
+
 /* ---------- text (drawn on the 4x overlay so it stays sharp) ---------- */
 function txt(s, x, y, size, c, align, plain){
   ug.font = 'bold ' + (size*S) + 'px Consolas, Menlo, monospace';
@@ -1070,12 +1139,14 @@ function txt(s, x, y, size, c, align, plain){
 /* fullscreen / mute / pause icons, top-right (also the touch targets) */
 function drawIcons(){
   const lit='#f2ead8', dim='#c9b98a';
-  if(canRotate){
-    P(W-72, 4, 14, 11, '#20242e');
-    const rx=W-70, ry=6, c=rotLocked?lit:dim;
-    P(rx+1, ry+3, 4, 6, c);  P(rx+2, ry+4, 2, 4, '#20242e');   // portrait phone
-    P(rx+6, ry+5, 6, 4, c);  P(rx+7, ry+6, 4, 2, '#20242e');   // landscape phone
-    P(rx+2, ry, 6, 1, c); P(rx+8, ry+1, 1, 1, c); P(rx+7, ry, 1, 2, c);  // turn arrow
+  // restart
+  P(W-72, 4, 14, 11, '#20242e');
+  {
+    const rx=W-68, ry=6, c=(state==='play'||state==='over')?dim:'#5a5a62';
+    P(rx+1, ry, 5, 1, c); P(rx+6, ry+1, 1, 1, c);      // arc over the top
+    P(rx+7, ry+2, 1, 4, c); P(rx+6, ry+6, 1, 1, c);    // down the right
+    P(rx+1, ry+7, 5, 1, c); P(rx, ry+2, 1, 4, c);      // under and up the left
+    P(rx+3, ry-2, 1, 3, c); P(rx+2, ry-1, 1, 1, c);    // arrow head
   }
   if(fsOK){
     P(W-54, 4, 14, 11, '#20242e');
@@ -1142,10 +1213,21 @@ function draw(){
     g.globalAlpha=1;
   }
 
+  // special-ready glow around the screen edge
+  if(state==='play' && power>=CFG.SPECIAL_CHARGE_REQUIRED && special<=0){
+    const pulse = RM ? .18 : .12 + .1*Math.sin(t*0.13);
+    g.globalAlpha = pulse;
+    P(0,0,W,5,'#ffd23e'); P(0,H-5,W,5,'#ffd23e'); P(0,0,5,H,'#ffd23e'); P(W-5,0,5,H,'#ffd23e');
+    g.globalAlpha = pulse*0.55;
+    P(0,5,W,3,'#f78a1e'); P(0,H-8,W,3,'#f78a1e'); P(5,0,3,H,'#f78a1e'); P(W-8,0,3,H,'#f78a1e');
+    g.globalAlpha = 1;
+  }
+
   // ---- HUD ----
   if(state!=='title'){
     txt('SCORE ' + String(Math.floor(score)).padStart(6,'0'), 6, 12, 9, '#fff');
-    txt('BEST ' + hs, W-(canRotate?76:58), 12, 9, '#ffe9a8', 'right');
+    txt(metres() + 'm', 6, 40, 8, '#c9e8a8');
+    txt('BEST ' + hs, W-76, 12, 9, '#ffe9a8', 'right');
     // special meter
     const ready = power>=CFG.SPECIAL_CHARGE_REQUIRED;
     for(let i=0;i<CFG.SPECIAL_CHARGE_REQUIRED;i++){
@@ -1181,8 +1263,17 @@ function draw(){
     txt('SPECIAL',     W/2-8, 125, 8, '#c9b98a', 'right');
     txt('CTRL / X',    W/2+8, 125, 8, '#f6d868');
     txt('ESC PAUSE    M MUTE    F FULLSCREEN', W/2, 136, 7, '#8a8272', 'center');
-    if(hs>0) txt('BEST ' + hs, W/2, 155, 8, '#ffe9a8', 'center');
-    if((t>>4)%2===0) txt('PRESS SPACE / TAP TO START', W/2, 171, 9, '#ffd23e', 'center');
+    // difficulty picker
+    const d = DIF();
+    P(60, 146, 200, 15, '#0d1016');
+    P(60, 146, 200, 1, '#3a4150'); P(60, 160, 200, 1, '#3a4150');
+    P(60, 146, 1, 15, '#3a4150'); P(259, 146, 1, 15, '#3a4150');
+    P(64, 150, 7, 7, '#20242e'); P(65, 152, 4, 3, '#f6d868');    // left arrow hint
+    P(249, 150, 7, 7, '#20242e'); P(251, 152, 4, 3, '#f6d868');
+    txt(d.name, W/2, 157, 9, '#ffd23e', 'center');
+    txt(d.blurb, W/2, 169, 7, '#c9b98a', 'center');
+    if(hs>0) txt('BEST ' + hs, 6, 157, 8, '#ffe9a8');
+    if((t>>4)%2===0) txt('TAP TO START', W-6, 157, 8, '#ffd23e', 'right');
   }
   if(state==='paused'){
     g.globalAlpha=.55; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
@@ -1190,14 +1281,42 @@ function draw(){
     txt('ESC / TAP TO RESUME', W/2, 102, 9, '#ffd23e', 'center');
   }
   if(state==='over'){
-    g.globalAlpha=.62; P(0,34,W,108,'#10131c'); g.globalAlpha=1;
-    txt('STUMPED!', W/2, 62, 22, '#e04a1e', 'center');
-    txt('SCORE ' + Math.floor(score), W/2, 80, 11, '#fff', 'center');
-    txt('STUMPS CLEARED ' + stumpsCleared + '   SMASHED ' + smashed, W/2, 94, 8, '#f6d868', 'center');
-    txt('BEST ' + hs, W/2, 106, 9, '#ffe9a8', 'center');
-    if(newBest && (t>>3)%2===0) txt('NEW BRIGADE RECORD!', W/2, 118, 8, '#ffd23e', 'center');
-    if(dead>35 && (t>>4)%2===0) txt('SPACE / TAP TO GO AGAIN', W/2, 118+(newBest?12:0), 8, '#f2ead8', 'center');
+    g.globalAlpha=.72; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
+    txt('STUMPED!', W/2, 56, 22, '#e04a1e', 'center');
+    txt('SCORE ' + Math.floor(score), W/2, 76, 11, '#fff', 'center');
+    txt(metres() + ' METRES TRAVELLED', W/2, 90, 9, '#c9e8a8', 'center');
+    txt('STUMPS CLEARED ' + stumpsCleared + '   SMASHED ' + smashed, W/2, 102, 8, '#f6d868', 'center');
+    txt(DIF().name, W/2, 113, 7, '#8a8272', 'center');
+    txt('BEST ' + hs, W/2, 125, 9, '#ffe9a8', 'center');
+    if(newBest && (t>>3)%2===0) txt('NEW BRIGADE RECORD!', W/2, 139, 8, '#ffd23e', 'center');
+    if(dead>35 && (t>>4)%2===0) txt('SPACE / TAP TO GO AGAIN', W/2, 155, 9, '#f2ead8', 'center');
   }
+  // portrait phone: big unmissable prompt, because landscape is the game
+  if(needsRotate()){
+    P(0,0,W,H,'#0d1016');
+    const bob = Math.sin(t*0.08)*2;
+    const px=W/2-26, py=52+bob;
+    P(px+6, py, 28, 44, '#3a4150'); P(px+8, py+2, 24, 40, '#7fc4e8');   // portrait phone
+    P(px+16, py+44, 8, 2, '#3a4150');
+    P(px-4, py+52, 48, 26, '#2c3140'); P(px-2, py+54, 44, 22, '#5c7a52'); // landscape phone
+    // turn arrow sweeping between them
+    const a=(t>>3)%2;
+    P(px+40, py+8+a, 3, 12, '#ffd23e'); P(px+37, py+18+a, 9, 3, '#ffd23e');
+    P(px+44, py+14+a, 3, 3, '#ffd23e');
+    txt('ROTATE YOUR PHONE', W/2, 26, 13, '#ffd23e', 'center');
+    txt('CHRISMANIA IS A LANDSCAPE GAME', W/2, 40, 7, '#c9b98a', 'center');
+    if(canRotate){
+      const glow=(t>>3)%2===0;
+      P(70, 142, 180, 26, '#20242e');
+      P(72, 144, 176, 22, glow?'#b8641e':'#8a4a16');
+      txt('TAP TO GO LANDSCAPE', W/2, 160, 10, glow?'#fff8d8':'#ffd23e', 'center');
+    } else {
+      txt('TURN YOUR PHONE SIDEWAYS', W/2, 158, 9, '#f2ead8', 'center');
+    }
+    g.restore();
+    return;   // nothing else matters until they turn it
+  }
+
   drawIcons();   // on top of every overlay so they stay tappable
   // touch special button (lower-left): STUMP SMASH! - jump is anywhere else
   if(state==='play'){
@@ -1240,6 +1359,9 @@ addEventListener('keydown', e=>{
   else if(e.code==='Escape'){ state==='paused' ? resume() : pause(); }
   else if(e.code==='KeyM'){ toggleMute(); }
   else if(e.code==='KeyF'){ toggleFullscreen(); }
+  else if(e.code==='KeyR'){ restartRun(); }
+  else if(state==='title' && (e.code==='ArrowLeft'||e.code==='ArrowRight')){ cycleDifficulty(e.code==='ArrowLeft'?-1:1); }
+  else if(state==='title' && (e.code==='Digit1'||e.code==='Digit2'||e.code==='Digit3')){ cycleDifficulty(+e.code.slice(5) - 1 - diffIx); }
 });
 addEventListener('keyup', e=>{
   if(e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW') endJump();
@@ -1247,14 +1369,22 @@ addEventListener('keyup', e=>{
 cv.addEventListener('pointerdown', e=>{
   e.preventDefault();
   unlockAudio();
+  // the rotate prompt owns the whole screen while it is up
+  if(needsRotate()){ if(canRotate) toggleRotate(); return; }
   const r = cv.getBoundingClientRect();
   const x = (e.clientX-r.left)/r.width*W, y = (e.clientY-r.top)/r.height*H;
   // icon row works in every state; unavailable icons fall through to a jump
   if(y<18){
-    if(canRotate && x>W-74 && x<W-56){ toggleRotate(); return; }
+    if(x>W-74 && x<W-56){ restartRun(); return; }
     if(fsOK && x>W-56 && x<W-38){ toggleFullscreen(); return; }
     if(x>W-38 && x<W-20){ toggleMute(); return; }
     if(x>W-20){ if(state==='paused') resume(); else pause(); return; }
+  }
+  // difficulty picker on the title screen
+  if(state==='title' && y>144 && y<162){
+    if(x<80){ cycleDifficulty(-1); return; }
+    if(x>240){ cycleDifficulty(1); return; }
+    if(x>=80 && x<=240){ cycleDifficulty(1); return; }
   }
   if(state==='play' && x<64 && y>H-36){ doSpecial(); return; }
   jump();

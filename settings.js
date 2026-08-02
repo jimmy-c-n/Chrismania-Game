@@ -43,6 +43,10 @@ window.GAME_SETTINGS = {
   SPAWN_MIN: 130,
   SPAWN_VAR: 150,
   SPAWN_SPEED_PAD: 22,
+  /* SPAWN_RHYTHM: true mixes short / normal / long gaps so the spacing
+     doesn't feel metronomic. Every gap is still floored at the distance
+     the truck needs to land and jump again. false = one flat range. */
+  SPAWN_RHYTHM: true,
   BIG_STUMP_CHANCE: 0.2,
   PAIR_CHANCE: 0.2,
   PAIR_MIN_SPEED: 3.1,
@@ -86,7 +90,7 @@ window.GAME_SETTINGS = {
      odds at max speed (scales up between min and max). */
   FIRE_MIN_SPEED: 4.2,
   FIRE_CHANCE: 0.45,
-  FIRE_EXTRA_HEIGHT: 6,
+  FIRE_EXTRA_HEIGHT: 13,
 
   /* ---------- STEVE THE CAPTAIN ----------
      Pixels of driving between his visits (min + random extra).
@@ -175,7 +179,7 @@ window.GAME_SETTINGS = {
     jump:  { use:'synth', src:'assets/audio/sfx/jump.wav',  vol:1 },  // truck leaves the ground
     land:  { use:'synth', src:'assets/audio/sfx/land.wav',  vol:1 },  // touches back down
     medal: { use:'synth', src:'assets/audio/sfx/medal.wav', vol:1 },  // RFS medal collected
-    ready: { use:'synth', src:'assets/audio/sfx/ready.wav', vol:1 },  // special meter fills
+    ready: { use:'file', src:'assets/audio/sfx/ready.mp3', vol:1 },  // special meter fills
     punch: { use:'file', src:'assets/audio/sfx/punch.mp3', vol:1 },  // special move fires
     smash: { use:'synth', src:'assets/audio/sfx/smash.wav', vol:1 },  // a stump is destroyed
     pop:   { use:'synth', src:'assets/audio/sfx/pop.wav',   vol:1 },  // cowpat, Brett bumped
