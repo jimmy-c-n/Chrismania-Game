@@ -178,7 +178,7 @@ window.GAME_SETTINGS = {
     music: { use:'file', src:'assets/audio/music/stump-run-loop.wav', vol:0.5 },
     jump:  { use:'synth', src:'assets/audio/sfx/jump.wav',  vol:1 },  // truck leaves the ground
     land:  { use:'synth', src:'assets/audio/sfx/land.wav',  vol:1 },  // touches back down
-    medal: { use:'synth', src:'assets/audio/sfx/medal.wav', vol:1 },  // RFS medal collected
+    medal: { use:'synth', src:'assets/audio/sfx/medal.mp3', vol:1 },  // RFS medal collected
     ready: { use:'file', src:'assets/audio/sfx/ready.mp3', vol:1 },  // special meter fills
     punch: { use:'file', src:'assets/audio/sfx/punch.mp3', vol:1 },  // special move fires
     smash: { use:'synth', src:'assets/audio/sfx/smash.wav', vol:1 },  // a stump is destroyed
