@@ -96,6 +96,7 @@ const CFG = Object.assign({
   },
   MUSIC_SPEEDUP: true,       // song speeds up with the run
   MUSIC_SPEEDUP_RATIO: 0.5,  // how much faster at max speed (0.5 = 50% faster)
+  SFX_VOLUME: 1,             // master trim over every effect (synth and file)
   SHOW_COW: true,            // the cow does the deed before Steve trips
   SHOW_FENCE: true,          // barbed-wire fence Steve hops before the pat
   DEBUG_COLLISION_BOXES: false
@@ -229,6 +230,9 @@ function finishLoading(){
   startMusic();
   announce('Ready');
 }
+/* per-sound trim; applies to synth and file alike. >1 boosts. */
+const cfgVol = k => { const c=audCfg(k); return (c && c.vol!=null) ? c.vol : 1; };
+const sfxVol = k => Math.max(0, cfgVol(k) * (CFG.SFX_VOLUME!=null ? CFG.SFX_VOLUME : 1));
 function playBuf(k, vol, loop, rate){
   const e = AUD[k];
   if(!e || e.state!=='ready') return null;
@@ -236,7 +240,7 @@ function playBuf(k, vol, loop, rate){
   s.buffer=e.buf; s.loop=!!loop;
   if(rate) s.playbackRate.value=rate;
   s.connect(v); v.connect(AC.destination);
-  v.gain.value = vol * ((audCfg(k)&&audCfg(k).vol!=null) ? audCfg(k).vol : 1);
+  v.gain.value = vol;
   s.start();
   return {src:s, gain:v};
 }
@@ -246,11 +250,15 @@ function sfx(k){
   if(!ensureAC()) return;
   if(wantFile(k)){
     if(!AUD[k] || AUD[k].state==='idle') loadAudio(k);
-    if(AUD[k] && AUD[k].state==='ready'){ playBuf(k, 1); return; }
+    if(AUD[k] && AUD[k].state==='ready'){ playBuf(k, sfxVol(k)); return; }
     if(AUD[k] && AUD[k].state==='loading') return;   // don't double up while it arrives
   }
   try{
-    const o=AC.createOscillator(), v=AC.createGain(); o.connect(v); v.connect(AC.destination);
+    // everything below runs through m, so one node carries the trim. The raw
+    // envelope levels are deliberately conservative, hence the 3x baseline.
+    const o=AC.createOscillator(), v=AC.createGain(), m=AC.createGain();
+    o.connect(v); v.connect(m); m.connect(AC.destination);
+    m.gain.value = 3 * sfxVol(k);
     const n=AC.currentTime;
     if(k==='jump'){ o.type='square'; o.frequency.setValueAtTime(230,n); o.frequency.exponentialRampToValueAtTime(540,n+.12); v.gain.setValueAtTime(.07,n); v.gain.exponentialRampToValueAtTime(.001,n+.18); o.start(n); o.stop(n+.2); }
     else if(k==='land'){ o.type='square'; o.frequency.setValueAtTime(160,n); o.frequency.exponentialRampToValueAtTime(90,n+.07); v.gain.setValueAtTime(.05,n); v.gain.exponentialRampToValueAtTime(.001,n+.09); o.start(n); o.stop(n+.1); }
@@ -267,7 +275,7 @@ function sfx(k){
       const buf=AC.createBuffer(1,(AC.sampleRate*.12)|0,AC.sampleRate), d=buf.getChannelData(0);
       for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length);
       const nz=AC.createBufferSource(), nv=AC.createGain();
-      nz.buffer=buf; nz.connect(nv); nv.connect(AC.destination);
+      nz.buffer=buf; nz.connect(nv); nv.connect(m);
       nv.gain.setValueAtTime(.15,n); nz.start(n);
     }
   }catch(e){}
@@ -348,7 +356,7 @@ function startMusic(){
   if(wantFile('music')){
     if(!AUD.music || AUD.music.state==='idle') loadAudio('music');
     const st = AUD.music && AUD.music.state;
-    if(st==='ready'){ musicSrc = playBuf('music', .5*CFG.MUSIC_VOLUME, true, musicRate()); return; }
+    if(st==='ready'){ musicSrc = playBuf('music', .5*CFG.MUSIC_VOLUME*cfgVol('music'), true, musicRate()); return; }
     if(st==='loading') return;          // startMusic runs again once it lands
   }
   musicNext = Math.max(musicNext, AC.currentTime + .05);

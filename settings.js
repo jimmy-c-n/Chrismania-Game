@@ -27,7 +27,7 @@ window.GAME_SETTINGS = {
      SPEED_RAMP: how quickly it ramps. Bigger = faster ramp.
        0.0002 gentle cruise, 0.00035 default, 0.0008 sweaty. */
   BASE_SPEED: 4.2,
-  MAX_SPEED: 10,
+  MAX_SPEED: 9,
   SPEED_RAMP: 0.00025,
 
   /* ---------- STUMP SPAWNING ----------
@@ -140,6 +140,10 @@ window.GAME_SETTINGS = {
   MUSIC_SPEEDUP: true,
   MUSIC_SPEEDUP_RATIO: 0.5,
 
+  /* Master trim over every sound effect, on top of each vol below.
+     Raise this to bring all the effects up against the music at once. */
+  SFX_VOLUME: 1,
+
   /* ---------- AUDIO SOURCES ----------
      Every sound is generated in code by default. To use your own
      recording instead, flip that sound to 'file' and point src at it.
@@ -147,7 +151,10 @@ window.GAME_SETTINGS = {
        use: 'synth'  generated in code (src is ignored)
        use: 'file'   loads src instead
        src:          path relative to index.html
-       vol:          0..1 trim, applies to the file only (default 1)
+       vol:          loudness trim, synth or file alike (default 1).
+                     Above 1 boosts: 2 is twice as loud. The generated
+                     effects are quiet next to a mastered music track,
+                     so lift the ones you want to cut through.
 
      A file that is missing, blocked or won't decode silently falls
      back to the synth version, so the game is never left silent.
@@ -164,12 +171,12 @@ window.GAME_SETTINGS = {
      Music note: with a file, MUSIC_SPEEDUP works by nudging playback
      rate, so the track rises slightly in pitch as it speeds up. */
   AUDIO: {
-    music: { use:'file', src:'assets/audio/music/stump-run-loop.wav', vol:0.7 },
+    music: { use:'file', src:'assets/audio/music/stump-run-loop.wav', vol:0.5 },
     jump:  { use:'synth', src:'assets/audio/sfx/jump.wav',  vol:1 },  // truck leaves the ground
     land:  { use:'synth', src:'assets/audio/sfx/land.wav',  vol:1 },  // touches back down
     medal: { use:'synth', src:'assets/audio/sfx/medal.wav', vol:1 },  // RFS medal collected
     ready: { use:'synth', src:'assets/audio/sfx/ready.wav', vol:1 },  // special meter fills
-    punch: { use:'synth', src:'assets/audio/sfx/punch.wav', vol:1 },  // special move fires
+    punch: { use:'file', src:'assets/audio/sfx/punch.mp3', vol:1 },  // special move fires
     smash: { use:'synth', src:'assets/audio/sfx/smash.wav', vol:1 },  // a stump is destroyed
     pop:   { use:'synth', src:'assets/audio/sfx/pop.wav',   vol:1 },  // cowpat, Brett bumped
     crash: { use:'synth', src:'assets/audio/sfx/crash.wav', vol:1 },  // hit a stump, lose a life
