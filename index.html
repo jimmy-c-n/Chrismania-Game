@@ -115,7 +115,7 @@ const ls = {
 };
 
 let state='loading', t=0, dist=0, speed=CFG.BASE_SPEED, score=0, stumpsCleared=0, smashed=0;
-let loadTotal=0, loadDone=0;
+let loadTotal=0, loadDone=0, loadShown=0;
 let hs = +(ls.get('cm_hs')||0), newBest=false;
 const truck = { x:42, y:GY, vy:0, ground:true };
 let stumps=[], medals=[], parts=[], nextSpawn=W+160, nextMedal=200;
@@ -166,12 +166,43 @@ function loadAudio(k){
   const c = audCfg(k); if(!c || !c.src || !AC) return;
   const e = AUD[k] = AUD[k] || {state:'idle'};
   if(e.state!=='idle') return;
-  e.state='loading';
+  e.state='loading'; e.got=0; e.total=0;
   fetch(c.src)
-    .then(r=>{ if(!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+    .then(r=>{
+      if(!r.ok) throw new Error(r.status);
+      e.total = +r.headers.get('content-length') || 0;
+      // stream it so the bar can move on a single file; fall back if unsupported
+      if(!e.total || !r.body || !r.body.getReader) return r.arrayBuffer();
+      const reader = r.body.getReader(), chunks=[];
+      return (function pump(){
+        return reader.read().then(({done, value})=>{
+          if(done){
+            const all = new Uint8Array(e.got); let o=0;
+            for(const ch of chunks){ all.set(ch, o); o += ch.length; }
+            return all.buffer;
+          }
+          chunks.push(value); e.got += value.length;
+          return pump();
+        });
+      })();
+    })
     .then(b=>AC.decodeAudioData(b))
     .then(buf=>{ e.buf=buf; e.state='ready'; settled(k); })
     .catch(()=>{ e.state='failed'; settled(k); });
+}
+/* 0..1 across every sourced file, by bytes. A fully downloaded but still
+   decoding file sits just under 1 so the bar shows the decode too. */
+function loadProgress(){
+  if(!loadTotal) return 1;
+  let sum = 0;
+  Object.keys(CFG.AUDIO||{}).forEach(k=>{
+    if(!wantFile(k)) return;
+    const e = AUD[k];
+    if(!e) return;
+    if(e.state==='ready' || e.state==='failed') sum += 1;
+    else if(e.total) sum += 0.95 * Math.min(1, e.got/e.total);
+  });
+  return Math.min(1, sum/loadTotal);
 }
 function settled(k){
   loadDone++;
@@ -844,8 +875,13 @@ function resume(){ if(state==='paused'){ state='play'; startMusic(); announce('R
 function update(){
   t++;
   if(state==='loading'){
+    const target = loadProgress();
+    loadShown += (target - loadShown) * 0.16;      // ease so it never snaps
+    if(target - loadShown < 0.004) loadShown = target;
+    const allSettled = (loadTotal===0 || loadDone>=loadTotal);
+    // hold ~0.7s minimum so a fast load reads as deliberate, not a flash;
     // 8s ceiling so a stalled download can never lock anyone out
-    if(loadTotal===0 || loadDone>=loadTotal || t>480) finishLoading();
+    if((allSettled && loadShown>=0.999 && t>42) || t>480) finishLoading();
     return;
   }
   if(shake>0) shake--;
@@ -1115,9 +1151,10 @@ function draw(){
   if(state==='loading'){
     g.globalAlpha=.78; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
     txt('CHRISMANIA', W/2, 78, 22, '#ffd23e', 'center');
-    const p = loadTotal ? Math.min(1, loadDone/loadTotal) : 1;
+    const p = Math.max(0, Math.min(1, loadShown));
     P(78, 94, 164, 10, '#20242e');
     P(80, 96, 160*p, 6, '#e8b93e');
+    if(p>0.02) P(80, 96, 160*p, 2, '#f6d868');     // highlight along the fill
     txt('LOADING  ' + Math.round(p*100) + '%', W/2, 118, 8, '#f2ead8', 'center');
   }
   if(state==='title'){
