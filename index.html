@@ -114,7 +114,8 @@ const ls = {
   set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 };
 
-let state='title', t=0, dist=0, speed=CFG.BASE_SPEED, score=0, stumpsCleared=0, smashed=0;
+let state='loading', t=0, dist=0, speed=CFG.BASE_SPEED, score=0, stumpsCleared=0, smashed=0;
+let loadTotal=0, loadDone=0;
 let hs = +(ls.get('cm_hs')||0), newBest=false;
 const truck = { x:42, y:GY, vy:0, ground:true };
 let stumps=[], medals=[], parts=[], nextSpawn=W+160, nextMedal=200;
@@ -169,12 +170,33 @@ function loadAudio(k){
   fetch(c.src)
     .then(r=>{ if(!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
     .then(b=>AC.decodeAudioData(b))
-    .then(buf=>{ e.buf=buf; e.state='ready'; if(k==='music' && state==='play'){ stopMusic(); startMusic(); } })
-    .catch(()=>{ e.state='failed'; if(k==='music' && state==='play') startMusic(); });
+    .then(buf=>{ e.buf=buf; e.state='ready'; settled(k); })
+    .catch(()=>{ e.state='failed'; settled(k); });
+}
+function settled(k){
+  loadDone++;
+  // a late arrival still swaps in mid-run rather than waiting for the next game
+  if(k==='music' && (state==='play'||state==='title')){ stopMusic(); startMusic(); }
 }
 function preloadAudio(){
   if(!AC) return;
   Object.keys(CFG.AUDIO||{}).forEach(k=>{ if(wantFile(k)) loadAudio(k); });
+}
+/* Fetch and decode every sourced file before the title screen, so nothing
+   pops in mid-round. The context starts suspended until the first gesture;
+   decoding works fine in that state. */
+function bootAudio(){
+  try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ AC=null; }
+  audPreloaded = true;
+  const keys = Object.keys(CFG.AUDIO||{}).filter(wantFile);
+  loadTotal = AC ? keys.length : 0;
+  keys.forEach(loadAudio);
+}
+function finishLoading(){
+  if(state!=='loading') return;
+  state='title';
+  startMusic();
+  announce('Ready');
 }
 function playBuf(k, vol, loop, rate){
   const e = AUD[k];
@@ -270,7 +292,7 @@ function mnote(f, when, dur, type, vol){
   o.start(when); o.stop(when+dur+.02);
 }
 function musicLoop(){
-  if(state!=='play' || mute || !CFG.MUSIC){ musicId=null; return; }
+  if((state!=='play' && state!=='title') || mute || !CFG.MUSIC){ musicId=null; return; }
   const V=CFG.MUSIC_VOLUME;
   const prog = Math.max(0, Math.min(1, (speed-CFG.BASE_SPEED)/(CFG.MAX_SPEED-CFG.BASE_SPEED)));
   const ramp = CFG.MUSIC_SPEEDUP ? prog*CFG.MUSIC_SPEEDUP_RATIO : 0;
@@ -766,6 +788,7 @@ function reset(){
 }
 function startJump(){ truck.vy=CFG.JUMP_VELOCITY; truck.ground=false; coyote=0; jumpBuf=0; sfx('jump'); }
 function jump(){
+  if(state==='loading') return;
   if(state==='title'){ state='play'; reset(); return; }
   if(state==='over'){ if(dead>35){ state='play'; reset(); } return; }
   if(state==='paused'){ resume(); return; }
@@ -820,6 +843,11 @@ function resume(){ if(state==='paused'){ state='play'; startMusic(); announce('R
 
 function update(){
   t++;
+  if(state==='loading'){
+    // 8s ceiling so a stalled download can never lock anyone out
+    if(loadTotal===0 || loadDone>=loadTotal || t>480) finishLoading();
+    return;
+  }
   if(shake>0) shake--;
   if(redFlash>0) redFlash--;
   updateParts();
@@ -1084,6 +1112,14 @@ function draw(){
     // lives
     for(let i=0;i<CFG.LIVES;i++) drawHelmet(6+i*11, 29, i<lives);
   }
+  if(state==='loading'){
+    g.globalAlpha=.78; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
+    txt('CHRISMANIA', W/2, 78, 22, '#ffd23e', 'center');
+    const p = loadTotal ? Math.min(1, loadDone/loadTotal) : 1;
+    P(78, 94, 164, 10, '#20242e');
+    P(80, 96, 160*p, 6, '#e8b93e');
+    txt('LOADING  ' + Math.round(p*100) + '%', W/2, 118, 8, '#f2ead8', 'center');
+  }
   if(state==='title'){
     g.globalAlpha=.66; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
     txt('CHRISMANIA', W/2, 40, 26, '#ffd23e', 'center');
@@ -1141,11 +1177,18 @@ function loop(now){
   draw();
   requestAnimationFrame(loop);
 }
+bootAudio();
 requestAnimationFrame(loop);
 
 /* ---------- input ---------- */
+// browsers hold audio until a gesture: resume and get the music going
+function unlockAudio(){
+  ensureAC();
+  if(!musicId && !musicSrc && (state==='title' || state==='play')) startMusic();
+}
 addEventListener('keydown', e=>{
   if(e.repeat) return;
+  unlockAudio();
   if(e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW'){ e.preventDefault(); jump(); }
   else if(e.code==='Enter'){ if(state==='title'||state==='over') jump(); }
   else if(e.code==='ControlLeft' || e.code==='ControlRight' || e.code==='KeyX'){ doSpecial(); }
@@ -1158,6 +1201,7 @@ addEventListener('keyup', e=>{
 });
 cv.addEventListener('pointerdown', e=>{
   e.preventDefault();
+  unlockAudio();
   const r = cv.getBoundingClientRect();
   const x = (e.clientX-r.left)/r.width*W, y = (e.clientY-r.top)/r.height*H;
   // icon row works in every state; unavailable icons fall through to a jump
