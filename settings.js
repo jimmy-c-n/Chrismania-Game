@@ -27,7 +27,7 @@ window.GAME_SETTINGS = {
      SPEED_RAMP: how quickly it ramps. Bigger = faster ramp.
        0.0002 gentle cruise, 0.00035 default, 0.0008 sweaty. */
   BASE_SPEED: 4.2,
-  MAX_SPEED: 8,
+  MAX_SPEED: 10,
   SPEED_RAMP: 0.00025,
 
   /* ---------- STUMP SPAWNING ----------
