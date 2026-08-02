@@ -93,7 +93,10 @@ const CFG = Object.assign({
     smash: { use:'synth', src:'assets/audio/sfx/smash.wav' },
     pop:   { use:'synth', src:'assets/audio/sfx/pop.wav'   },
     crash: { use:'synth', src:'assets/audio/sfx/crash.wav' },
-    nag:   { use:'synth', src:'assets/audio/sfx/nag.wav'   }
+    nag:   { use:'synth', src:'assets/audio/sfx/nag.wav'   },
+    gameover: { use:'synth', src:'assets/audio/sfx/gameover.wav' },
+    steve: { use:'synth', src:'assets/audio/sfx/steve.wav' },
+    brett: { use:'synth', src:'assets/audio/sfx/brett.wav' }
   },
   MUSIC_SPEEDUP: true,       // song speeds up with the run
   MUSIC_SPEEDUP_RATIO: 0.5,  // how much faster at max speed (0.5 = 50% faster)
@@ -121,11 +124,11 @@ const ls = {
    keeps reading CFG exactly as before. */
 const CFG0 = JSON.parse(JSON.stringify(CFG));
 const DIFFS = [
-  { id:'easy',   name:'SUNDAY DRIVE', blurb:'CRUISY, AND AN EXTRA LIFE',
+  { id:'easy',   name:'SUNDAY DRIVE', blurb:'SLOWER TRUCK - 4 LIVES - LESS FIRE',
     speed:0.80, ramp:0.65, gap:1.30, lives:+1, fire:0.50, medals:0.75 },
-  { id:'normal', name:'VOLLIE',       blurb:'THE PROPER RUN',
+  { id:'normal', name:'VOLLIE',       blurb:'THE STANDARD SHIFT - 3 LIVES',
     speed:1.00, ramp:1.00, gap:1.00, lives: 0, fire:1.00, medals:1.00 },
-  { id:'hard',   name:'STUMP MASTER', blurb:'GOOD LUCK, CHRIS',
+  { id:'hard',   name:'STUMP MASTER', blurb:'FAST - 2 LIVES - EVERYTHING BURNS',
     speed:1.18, ramp:1.45, gap:0.82, lives:-1, fire:1.45, medals:1.35 }
 ];
 let diffIx = Math.max(0, DIFFS.findIndex(d=>d.id===(ls.get('cm_diff')||'normal')));
@@ -159,7 +162,7 @@ const truck = { x:42, y:GY, vy:0, ground:true };
 let stumps=[], medals=[], parts=[], nextSpawn=W+160, nextMedal=200;
 let power=0, special=0, lives=CFG.LIVES;
 let hitstop=0, invuln=0, redFlash=0, jumpBuf=0, coyote=0;
-let dead=0, shake=0, mute = ls.get('cm_mute')==='1';
+let dead=0, shake=0, restartFx=0, mute = ls.get('cm_mute')==='1';
 
 /* the captain's greatest hits - short so they stay readable */
 const NAGS = [
@@ -305,6 +308,30 @@ function sfx(k){
     else if(k==='pop'){ o.type='square'; o.frequency.setValueAtTime(420,n); o.frequency.exponentialRampToValueAtTime(120,n+.1); v.gain.setValueAtTime(.06,n); v.gain.exponentialRampToValueAtTime(.001,n+.12); o.start(n); o.stop(n+.13); }
     else if(k==='crash'){ o.type='triangle'; o.frequency.setValueAtTime(150,n); o.frequency.exponentialRampToValueAtTime(28,n+.55); v.gain.setValueAtTime(.15,n); v.gain.exponentialRampToValueAtTime(.001,n+.6); o.start(n); o.stop(n+.62); }
     else if(k==='nag'){ o.type='square'; o.frequency.setValueAtTime(520,n); o.frequency.setValueAtTime(390,n+.09); o.frequency.setValueAtTime(470,n+.18); v.gain.setValueAtTime(.06,n); v.gain.exponentialRampToValueAtTime(.001,n+.26); o.start(n); o.stop(n+.28); }
+    else if(k==='gameover'){
+      // sad little descending jingle
+      o.type='square';
+      o.frequency.setValueAtTime(392,n); o.frequency.setValueAtTime(330,n+.18);
+      o.frequency.setValueAtTime(262,n+.36); o.frequency.setValueAtTime(196,n+.54);
+      o.frequency.exponentialRampToValueAtTime(98,n+.9);
+      v.gain.setValueAtTime(.09,n); v.gain.exponentialRampToValueAtTime(.001,n+.95);
+      o.start(n); o.stop(n+.96);
+    }
+    else if(k==='steve'){
+      // Steve going over: low gravelly waaah
+      o.type='sawtooth';
+      o.frequency.setValueAtTime(520,n); o.frequency.exponentialRampToValueAtTime(140,n+.32);
+      v.gain.setValueAtTime(.10,n); v.gain.exponentialRampToValueAtTime(.001,n+.36);
+      o.start(n); o.stop(n+.38);
+    }
+    else if(k==='brett'){
+      // Brett copping it: higher two-note yelp
+      o.type='square';
+      o.frequency.setValueAtTime(980,n); o.frequency.setValueAtTime(760,n+.07);
+      o.frequency.setValueAtTime(980,n+.14); o.frequency.exponentialRampToValueAtTime(260,n+.3);
+      v.gain.setValueAtTime(.09,n); v.gain.exponentialRampToValueAtTime(.001,n+.34);
+      o.start(n); o.stop(n+.36);
+    }
     else if(k==='smash'){
       // deep boom with a woody crack of noise
       o.type='sawtooth'; o.frequency.setValueAtTime(180,n); o.frequency.exponentialRampToValueAtTime(35,n+.3);
@@ -612,36 +639,36 @@ function drawBrett(b){
   g.globalAlpha=.2; P(x-6,gy0-1,13,2,'#3a2712'); g.globalAlpha=1;
   if(b.fly){
     // sent flying - ho ho no
-    P(x-6,y-12,12,6,'#2c3140');
+    P(x-6,y-12,12,6,'#d8b93a');
+    P(x-6,y-9,12,1,'#e8e2d0');            // stripe on the way past
     P(x-9,y-14,4,4,'#e8b482');
-    P(x-9,y-13,4,1,'#5a5f68');            // mo still attached
+    P(x-10,y-12,5,1,'#4a4f57');           // mo still attached
     P(x+6,y-8,4,3,'#1d2026');
     P(x-2,y-17,7,2,'#c8362a'); P(x+4,y-18,3,3,'#f2f2ec');
     return;
   }
   // boots
   P(x-4,y-3,4,3,'#1d2026'); P(x+1,y-3,4,3,'#1d2026');
-  // navy RFS work trousers
+  // navy work trousers, same as Steve
   P(x-3,y-8,3,5,'#2c3140'); P(x+1,y-8,3,5,'#2c3140');
-  // navy RFS shirt with reflective stripe and epaulettes
-  P(x-4,y-15,9,7,'#2c3140');
-  P(x-4,y-15,9,1,'#3d445a');
+  // Steve's hi-vis RFS jacket - Brett kept the Santa hat though
+  P(x-4,y-15,9,7,'#d8b93a');
+  P(x-4,y-15,9,1,'#c0a22e');
   P(x-4,y-11,9,1,'#e8e2d0');
-  P(x-4,y-15,2,1,'#e8b93e'); P(x+3,y-15,2,1,'#e8b93e');
-  P(x-3,y-14,2,2,'#e8e2d0');            // brigade patch
   // lecturing finger, wagging at the truck
-  if((t>>3)&1){ P(x-8,y-15,4,2,'#2c3140'); P(x-11,y-16,3,2,'#e8b482'); }
-  else        { P(x-8,y-14,4,2,'#2c3140'); P(x-11,y-13,3,2,'#e8b482'); }
+  if((t>>3)&1){ P(x-8,y-15,4,2,'#d8b93a'); P(x-11,y-16,3,2,'#e8b482'); }
+  else        { P(x-8,y-14,4,2,'#d8b93a'); P(x-11,y-13,3,2,'#e8b482'); }
   // other arm on hip
-  P(x+4,y-14,2,4,'#2c3140'); P(x+4,y-10,2,2,'#e8b482');
+  P(x+4,y-14,2,4,'#d8b93a'); P(x+4,y-10,2,2,'#e8b482');
   // head, facing left toward the truck
   P(x-3,y-21,7,6,'#e8b482');
   P(x-3,y-19,1,1,'#20242c'); P(x-1,y-19,1,1,'#20242c');
-  // dark grey bushy mo
-  P(x-4,y-17,8,2,'#4a4f57');
-  P(x-4,y-16,3,1,'#5a5f68');
+  // proper bushy mo: thick under the nose, drooping at both ends
+  P(x-3,y-18,5,1,'#4a4f57');
+  P(x-4,y-17,7,1,'#4a4f57');
+  P(x-4,y-16,2,1,'#5a5f68');
   P(x+2,y-16,2,1,'#5a5f68');
-  P(x-2,y-15,5,1,'#8a3324');            // mouth under it
+  P(x-1,y-16,2,1,'#8a3324');            // mouth peeking out underneath
   // santa hat only: fur brim, cone flopped back, pom pom
   P(x-4,y-23,9,2,'#f2f2ec');
   P(x-4,y-25,8,2,'#c8362a');
@@ -906,7 +933,7 @@ function knockInRange(){
   // Santa is not exempt from the STUMP SMASH
   if(brett && !brett.fly && brett.x < fx + CFG.SPECIAL_ATTACK_RANGE && brett.x+6 > fx-6){
     brett.fly=true; brett.vx=3; brett.vyo=3.5; brett.yo=0;
-    score += CFG.SPECIAL_DESTROY_BONUS; sfx('smash');
+    score += CFG.SPECIAL_DESTROY_BONUS; sfx('smash'); sfx('brett');
     for(let i=0;i<8;i++) spawn(brett.x, GY-12, (Math.random()-.3)*3, -Math.random()*2.5, 22, ['#c8362a','#f2f2ec','#f78a1e'][i%3], 2);
   }
 }
@@ -918,7 +945,7 @@ function hit(hitStump){
   hitStump.fly=true; hitStump.vx=3; hitStump.vyo=3.5; hitStump.yo=0;
   for(let i=0;i<16;i++) spawn(truck.x+40+Math.random()*10, GY-14+Math.random()*10, (Math.random()-.4)*2.5, -Math.random()*2, 26, ['#9aa0a8','#f78a1e','#6b452c'][i%3], 2);
   if(lives<=0){
-    state='over'; dead=0; stopMusic();
+    state='over'; dead=0; stopMusic(); sfx('gameover');
     if(Math.floor(score)>hs){ hs=Math.floor(score); newBest=true; ls.set('cm_hs', hs); }
     announce('Game over. Score ' + Math.floor(score));
   } else {
@@ -927,7 +954,9 @@ function hit(hitStump){
 }
 function restartRun(){
   if(state!=='play' && state!=='over' && state!=='paused') return;
-  state='play'; reset(); announce('Restarted');
+  state='play'; reset();
+  restartFx=54; shake=RM?2:5; sfx('ready');
+  announce('Restarted');
 }
 function pause(){ if(state==='play'){ state='paused'; stopMusic(); announce('Paused'); } }
 function resume(){ if(state==='paused'){ state='play'; startMusic(); announce('Resumed'); } }
@@ -961,6 +990,7 @@ function update(){
   }
   if(shake>0) shake--;
   if(redFlash>0) redFlash--;
+  if(restartFx>0) restartFx--;
   updateParts();
   if(state==='over'){ dead++; return; }
   if(state!=='play') return;
@@ -1056,7 +1086,7 @@ function update(){
       }
       if(captain.pat){
         captain.pat.x -= speed;
-        if(captain.pat.x <= captain.x+4 && (captain.yo||0)<3){ captain.phase='trip'; sfx('pop'); }
+        if(captain.pat.x <= captain.x+4 && (captain.yo||0)<3){ captain.phase='trip'; sfx('steve'); }
       }
       // fence-hop physics
       if(captain.vyo || captain.yo){ captain.yo=(captain.yo||0)+captain.vyo; captain.vyo-=.3; if(captain.yo<=0){ captain.yo=0; captain.vyo=0; } }
@@ -1121,7 +1151,7 @@ function update(){
   }
   // Brett is a soft obstacle - bumping him just sends Santa flying, no damage
   if(brett && !brett.fly && truck.x+8 < brett.x+5 && truck.x+44 > brett.x-4 && truck.y-1 > GY+CFG.BRETT_Y_OFFSET-19){
-    brett.fly=true; brett.vx=3; brett.vyo=3.5; brett.yo=0; sfx('pop');
+    brett.fly=true; brett.vx=3; brett.vyo=3.5; brett.yo=0; sfx('brett');
     for(let i=0;i<8;i++) spawn(brett.x, GY-12, (Math.random()-.3)*2.5, -Math.random()*2.2, 22, ['#c8362a','#f2f2ec'][i%2], 2);
   }
 }
@@ -1139,14 +1169,18 @@ function txt(s, x, y, size, c, align, plain){
 /* fullscreen / mute / pause icons, top-right (also the touch targets) */
 function drawIcons(){
   const lit='#f2ead8', dim='#c9b98a';
-  // restart
+  // restart: tidy circular arrow
   P(W-72, 4, 14, 11, '#20242e');
   {
-    const rx=W-68, ry=6, c=(state==='play'||state==='over')?dim:'#5a5a62';
-    P(rx+1, ry, 5, 1, c); P(rx+6, ry+1, 1, 1, c);      // arc over the top
-    P(rx+7, ry+2, 1, 4, c); P(rx+6, ry+6, 1, 1, c);    // down the right
-    P(rx+1, ry+7, 5, 1, c); P(rx, ry+2, 1, 4, c);      // under and up the left
-    P(rx+3, ry-2, 1, 3, c); P(rx+2, ry-1, 1, 1, c);    // arrow head
+    const rx=W-69, ry=7;
+    const c=(state==='play'||state==='over'||state==='paused')?dim:'#5a5a62';
+    P(rx+1, ry,   4, 1, c);        // top of the ring
+    P(rx,   ry+1, 1, 4, c);        // left
+    P(rx+1, ry+5, 5, 1, c);        // bottom
+    P(rx+6, ry+2, 1, 3, c);        // right, gap at the top
+    P(rx+5, ry-1, 3, 1, c);        // arrowhead tucked into the gap
+    P(rx+5, ry,   2, 1, c);
+    P(rx+5, ry+1, 1, 1, c);
   }
   if(fsOK){
     P(W-54, 4, 14, 11, '#20242e');
@@ -1213,13 +1247,10 @@ function draw(){
     g.globalAlpha=1;
   }
 
-  // special-ready glow around the screen edge
+  // special-ready glow: one soft band breathing between transparencies
   if(state==='play' && power>=CFG.SPECIAL_CHARGE_REQUIRED && special<=0){
-    const pulse = RM ? .18 : .12 + .1*Math.sin(t*0.13);
-    g.globalAlpha = pulse;
-    P(0,0,W,5,'#ffd23e'); P(0,H-5,W,5,'#ffd23e'); P(0,0,5,H,'#ffd23e'); P(W-5,0,5,H,'#ffd23e');
-    g.globalAlpha = pulse*0.55;
-    P(0,5,W,3,'#f78a1e'); P(0,H-8,W,3,'#f78a1e'); P(5,0,3,H,'#f78a1e'); P(W-8,0,3,H,'#f78a1e');
+    g.globalAlpha = RM ? .14 : .04 + .16*(0.5 + 0.5*Math.sin(t*0.07));
+    P(0,0,W,4,'#ffd23e'); P(0,H-4,W,4,'#ffd23e'); P(0,0,4,H,'#ffd23e'); P(W-4,0,4,H,'#ffd23e');
     g.globalAlpha = 1;
   }
 
@@ -1265,15 +1296,17 @@ function draw(){
     txt('ESC PAUSE    M MUTE    F FULLSCREEN', W/2, 136, 7, '#8a8272', 'center');
     // difficulty picker
     const d = DIF();
-    P(60, 146, 200, 15, '#0d1016');
-    P(60, 146, 200, 1, '#3a4150'); P(60, 160, 200, 1, '#3a4150');
-    P(60, 146, 1, 15, '#3a4150'); P(259, 146, 1, 15, '#3a4150');
-    P(64, 150, 7, 7, '#20242e'); P(65, 152, 4, 3, '#f6d868');    // left arrow hint
-    P(249, 150, 7, 7, '#20242e'); P(251, 152, 4, 3, '#f6d868');
-    txt(d.name, W/2, 157, 9, '#ffd23e', 'center');
-    txt(d.blurb, W/2, 169, 7, '#c9b98a', 'center');
-    if(hs>0) txt('BEST ' + hs, 6, 157, 8, '#ffe9a8');
-    if((t>>4)%2===0) txt('TAP TO START', W-6, 157, 8, '#ffd23e', 'right');
+    P(60, 145, 200, 30, '#0d1016');
+    P(60, 145, 200, 1, '#3a4150'); P(60, 174, 200, 1, '#3a4150');
+    P(60, 145, 1, 30, '#3a4150'); P(259, 145, 1, 30, '#3a4150');
+    txt('DIFFICULTY - TAP ARROWS TO CHANGE', W/2, 152, 6, '#8a8272', 'center');
+    const ac = (t>>4)%2===0 ? '#f6d868' : '#c9b98a';
+    P(74,157,2,7,ac); P(72,158,2,5,ac); P(70,159,2,3,ac);      // left triangle
+    P(244,157,2,7,ac); P(246,158,2,5,ac); P(248,159,2,3,ac);   // right triangle
+    txt(d.name, W/2, 164, 10, '#ffd23e', 'center');
+    txt(d.blurb, W/2, 172, 7, '#c9b98a', 'center');
+    if(hs>0) txt('BEST ' + hs, 6, 164, 8, '#ffe9a8');
+    if((t>>4)%2===0) txt('TAP TO START', W-6, 164, 8, '#ffd23e', 'right');
   }
   if(state==='paused'){
     g.globalAlpha=.55; P(0,0,W,H,'#10131c'); g.globalAlpha=1;
@@ -1315,6 +1348,15 @@ function draw(){
     }
     g.restore();
     return;   // nothing else matters until they turn it
+  }
+
+  // restart transition: white flash, then RESTART! sails up and fades
+  if(restartFx>0){
+    const f = restartFx/54;                          // 1 -> 0
+    if(f>0.82){ g.globalAlpha=(f-0.82)/0.18*0.85; P(0,0,W,H,'#f2ead8'); g.globalAlpha=1; }
+    ug.globalAlpha = Math.min(1, f*1.6);             // text lives on the overlay canvas
+    txt('RESTART!', W/2, 88 - (1-f)*26, 20, '#ffd23e', 'center');
+    ug.globalAlpha = 1;
   }
 
   drawIcons();   // on top of every overlay so they stay tappable
@@ -1381,7 +1423,7 @@ cv.addEventListener('pointerdown', e=>{
     if(x>W-20){ if(state==='paused') resume(); else pause(); return; }
   }
   // difficulty picker on the title screen
-  if(state==='title' && y>144 && y<162){
+  if(state==='title' && y>144 && y<176){
     if(x<80){ cycleDifficulty(-1); return; }
     if(x>240){ cycleDifficulty(1); return; }
     if(x>=80 && x<=240){ cycleDifficulty(1); return; }

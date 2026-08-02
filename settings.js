@@ -184,7 +184,10 @@ window.GAME_SETTINGS = {
     smash: { use:'synth', src:'assets/audio/sfx/smash.wav', vol:1 },  // a stump is destroyed
     pop:   { use:'synth', src:'assets/audio/sfx/pop.wav',   vol:1 },  // cowpat, Brett bumped
     crash: { use:'synth', src:'assets/audio/sfx/crash.wav', vol:1 },  // hit a stump, lose a life
-    nag:   { use:'synth', src:'assets/audio/sfx/nag.wav',   vol:1 }   // Steve or Brett turns up
+    nag:   { use:'synth', src:'assets/audio/sfx/nag.wav',   vol:1 },  // Steve or Brett turns up
+    gameover: { use:'synth', src:'assets/audio/sfx/gameover.wav', vol:1 },  // final life lost
+    steve: { use:'synth', src:'assets/audio/sfx/steve.wav', vol:1 },  // Steve trips on the cowpat
+    brett: { use:'synth', src:'assets/audio/sfx/brett.wav', vol:1 }   // Brett gets bumped or smashed
   },
 
   /* ---------- COMEDY BITS ----------
